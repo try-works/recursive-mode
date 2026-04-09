@@ -36,7 +36,7 @@ The workflow package includes functionality for:
 - updating decisions, state, and memory as part of closeout
 - maintaining reusable skill-memory and capability guidance over time
 
-## Workflow Diagram
+## Workflow Overview
 
 ```mermaid
 flowchart TD
@@ -57,6 +57,15 @@ flowchart TD
 ```
 
 At a high level, the workflow turns a task into a durable run, moves that run through audited phases, and then feeds validated outcomes back into decisions, state, and memory so later runs start from better context.
+
+The main non-optional guardrails are:
+
+- repository documents, not prompts, are the source of truth for requirements, plans, and phase inputs
+- audited phases must pass through `draft -> audit -> repair -> re-audit -> pass -> lock`
+- locked history is not rewritten; later corrections are handled through addenda and downstream reconciliation
+- in-scope requirements need explicit dispositions and supporting implementation or verification evidence
+- delegated work is not trusted on its own; the main agent must verify it against real files, diffs, and artifacts
+- TDD, QA, review, and closeout all require explicit recorded modes, evidence, and phase outputs
 
 ## Benefits
 
@@ -115,17 +124,6 @@ Benefits of this memory model include:
 - one-off session noise does not have to be treated as durable truth
 - memory can be updated gradually as the codebase and workflow evolve
 - skill-related knowledge, such as when a subskill helps or when a capability is missing, can become part of the workflow’s long-term operating knowledge
-
-## Workflow Guardrails
-
-These are the main non-optional controls the workflow applies:
-
-- repository documents, not prompts, are the source of truth for requirements, plans, and phase inputs
-- audited phases must pass through `draft -> audit -> repair -> re-audit -> pass -> lock`
-- locked history is not rewritten; later corrections are handled through addenda and downstream reconciliation
-- in-scope requirements need explicit dispositions and supporting implementation or verification evidence
-- delegated work is not trusted on its own; the main agent must verify it against real files, diffs, and artifacts
-- TDD, QA, review, and closeout all require explicit recorded modes, evidence, and phase outputs
 
 ## Install
 
