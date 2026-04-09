@@ -40,23 +40,20 @@ The workflow package includes functionality for:
 
 ```mermaid
 flowchart TD
-    A[Install recursive-mode] --> B[Bootstrap target repo]
-    B --> C[Read /.recursive/RECURSIVE.md and router docs]
-    C --> D[Create run in /.recursive/run/<run-id>/]
-    D --> E[Phase 0-2: requirements, AS-IS, plan]
-    E --> F[Phase 3: implementation in isolated worktree]
-    F --> G[Phase 3.5: delegated review or self-audit]
-    G --> H[Phase 4: tests and verification]
-    H --> I[Phase 5: manual QA or agent-operated QA]
-    I --> J[Phase 6-8: decisions, state, memory closeout]
-    J --> K[Lock artifacts and verify locks]
-    K --> L[Future runs start with better context]
+    A[Create run in /.recursive/run/<run-id>/] --> B[Phase 0-2: requirements, AS-IS, plan]
+    B --> C[Phase 3: implementation in isolated worktree]
+    C --> D[Phase 3.5: delegated review or self-audit]
+    D --> E[Phase 4: tests and verification]
+    E --> F[Phase 5: manual QA or agent-operated QA]
+    F --> G[Phase 6-8: decisions, state, memory closeout]
+    G --> H[Lock artifacts and verify locks]
+    H --> I[Future runs start with better context]
 
-    E -. addenda update understanding .-> E
-    F -. draft -> audit -> repair -> re-audit .-> F
-    G -. main agent verifies delegated work .-> G
-    J -. durable lessons promoted into memory .-> L
-    L -. prior decisions, state, memory reread .-> C
+    B -. addenda update understanding .-> B
+    C -. draft -> audit -> repair -> re-audit .-> C
+    D -. main agent verifies delegated work .-> D
+    G -. durable lessons promoted into memory .-> I
+    I -. prior decisions, state, memory reread .-> B
 ```
 
 At a high level, the workflow turns a task into a durable run, moves that run through audited phases, and then feeds validated outcomes back into decisions, state, and memory so later runs start from better context.
