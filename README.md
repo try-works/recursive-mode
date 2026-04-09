@@ -169,6 +169,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot
 ```
 
 That creates the reusable `/.recursive/` scaffold, bridge docs, memory routers, and run layout used by the workflow.
+The bundled installer carries its own canonical workflow template, so bootstrap works from the installed skill package even when hidden repo directories are not present in the package layout.
 
 Important boundary:
 

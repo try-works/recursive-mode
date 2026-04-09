@@ -112,6 +112,26 @@ def main() -> None:
     else:
         print_ok("No generated local residue such as __pycache__/ or *.pyc is present.")
 
+    canonical_workflow = repo_root / ".recursive" / "RECURSIVE.md"
+    packaged_workflow = repo_root / "references" / "bootstrap" / "RECURSIVE.md"
+    if not packaged_workflow.exists():
+        failures += 1
+        snapshot_failures += 1
+        print_fail("Missing packaged bootstrap workflow template: references/bootstrap/RECURSIVE.md")
+    elif not canonical_workflow.exists():
+        failures += 1
+        snapshot_failures += 1
+        print_fail("Missing canonical workflow source file: .recursive/RECURSIVE.md")
+    else:
+        canonical_text = canonical_workflow.read_text(encoding="utf-8")
+        packaged_text = packaged_workflow.read_text(encoding="utf-8")
+        if canonical_text != packaged_text:
+            failures += 1
+            snapshot_failures += 1
+            print_fail("Packaged bootstrap workflow template does not match .recursive/RECURSIVE.md")
+        else:
+            print_ok("Packaged bootstrap workflow template matches .recursive/RECURSIVE.md.")
+
     for path in iter_text_files(repo_root):
         try:
             content = path.read_text(encoding="utf-8")

@@ -62,6 +62,7 @@ The installer bootstraps the canonical layout in a target repo:
 
 - `/.recursive/AGENTS.md` is a lightweight internal router/index
 - `/.recursive/RECURSIVE.md` remains the only workflow source of truth
+- `references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
 
 ## Main Maintainer Commands
 

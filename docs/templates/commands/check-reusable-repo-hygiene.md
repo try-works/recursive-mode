@@ -22,6 +22,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.ps1" -Rep
 - no concrete `/.recursive/run/<run-id>/` references remain in committed text files
 - no concrete temp-directory residue remains in committed text files
 - no generated local residue such as `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, or `.ruff_cache/` remains in the repo tree
+- the packaged bootstrap workflow template at `references/bootstrap/RECURSIVE.md` exists and matches `/.recursive/RECURSIVE.md`
 - optional `git status --porcelain` cleanliness when `--require-clean-git` is selected
 
 Interpretation:

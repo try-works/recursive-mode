@@ -41,6 +41,21 @@ def ensure_file(path: Path, content: str) -> None:
         print(f"[OK] File exists: {path}")
 
 
+def resolve_canonical_workflow_path(skill_root: Path) -> Path:
+    candidates = [
+        skill_root / "references" / "bootstrap" / "RECURSIVE.md",
+        skill_root / ".recursive" / "RECURSIVE.md",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            print(f"[INFO] Using canonical workflow template: {candidate}")
+            return candidate
+    raise FileNotFoundError(
+        "Missing canonical workflow template. Expected one of: "
+        + ", ".join(str(candidate) for candidate in candidates)
+    )
+
+
 def upsert_marked_block(file_path: Path, start_marker: str, end_marker: str, block_body: str) -> None:
     existing = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
     block = f"{start_marker}\n{block_body}\n{end_marker}"
@@ -411,7 +426,7 @@ def main() -> None:
     print(f"[INFO] Repo root: {repo_root}")
 
     skill_root = Path(__file__).resolve().parent.parent
-    canonical_workflow_path = skill_root / ".recursive" / "RECURSIVE.md"
+    canonical_workflow_path = resolve_canonical_workflow_path(skill_root)
     agents_block_path = skill_root / "references" / "agents-block.md"
 
     recursive_root = repo_root / ".recursive"
@@ -497,8 +512,6 @@ def main() -> None:
     upsert_marked_block(plans_path, plans_start_marker, plans_end_marker, plans_bridge_body().rstrip("\r\n"))
 
     if not args.skip_recursive_update:
-        if not canonical_workflow_path.exists():
-            raise FileNotFoundError(f"Missing canonical workflow template: {canonical_workflow_path}")
         if canonical_workflow_path.resolve() == recursive_path.resolve():
             print("[INFO] Skipped RECURSIVE.md self-upsert because source and destination are the same file.")
         else:

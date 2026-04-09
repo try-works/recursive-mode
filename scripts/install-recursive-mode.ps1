@@ -46,6 +46,24 @@ function Ensure-File {
   }
 }
 
+function Resolve-CanonicalWorkflowPath {
+  param([Parameter(Mandatory = $true)][string]$SkillRoot)
+
+  $candidates = @(
+    (Join-Path (Join-Path $SkillRoot "references") "bootstrap\RECURSIVE.md"),
+    (Join-Path (Join-Path $SkillRoot ".recursive") "RECURSIVE.md")
+  )
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      Write-Output "[INFO] Using canonical workflow template: $candidate"
+      return $candidate
+    }
+  }
+
+  throw ("Missing canonical workflow template. Expected one of: " + ($candidates -join ", "))
+}
+
 function Upsert-MarkedBlock {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
@@ -434,7 +452,7 @@ $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
 Write-Output "[INFO] Repo root: $resolvedRepoRoot"
 
 $skillRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$canonicalWorkflowPath = Join-Path (Join-Path $skillRoot ".recursive") "RECURSIVE.md"
+$canonicalWorkflowPath = Resolve-CanonicalWorkflowPath -SkillRoot $skillRoot
 $agentsBlockPath = Join-Path (Join-Path $skillRoot "references") "agents-block.md"
 
 $recursiveRoot = Join-Path $resolvedRepoRoot ".recursive"
@@ -549,9 +567,6 @@ Upsert-MarkedBlock `
   -BlockBody ((Get-PlansBridgeBody).TrimEnd("`r", "`n"))
 
 if (-not $SkipRecursiveUpdate) {
-  if (-not (Test-Path -LiteralPath $canonicalWorkflowPath)) {
-    throw "Missing canonical workflow template: $canonicalWorkflowPath"
-  }
   $canonicalResolved = [System.IO.Path]::GetFullPath($canonicalWorkflowPath)
   $recursiveResolved = [System.IO.Path]::GetFullPath($recursivePath)
   if ($canonicalResolved -eq $recursiveResolved) {
