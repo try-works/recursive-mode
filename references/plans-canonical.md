@@ -22,7 +22,7 @@ The current strict workflow requires:
 - audited phases use `draft -> audit -> repair -> re-audit -> pass -> lock`
 - audited phases are: Phase 1, Phase 1.5 when present, Phase 2, Phase 3, Phase 3.5 when present, Phase 4, Phase 6, Phase 7, and Phase 8
 - exactly one active phase may exist in a run at a time; later-phase draft work is invalid while an earlier phase remains unresolved
-- subagents are optional accelerators inside the active phase only; they do not permit parallel phase advancement
+- subagents are still optional infrastructure, but delegated audit/review is the default inside the active phase when subagents are available and the context bundle is complete; they do not permit parallel phase advancement
 - read-only review/audit delegation and independent test execution are allowed only inside the active phase
 - write-capable subagent work is allowed only for explicitly independent sub-phases with disjoint write scopes
 - meaningful subagent work must leave durable action records under `/.recursive/run/<run-id>/subagents/` and the controller must verify them against actual files and artifacts before acceptance
@@ -36,11 +36,14 @@ Every audited phase must record:
 - `Subagent Availability: available` or `Subagent Availability: unavailable`
 - `Subagent Capability Probe`
 - `Delegation Decision Basis`
+- `Delegation Override Reason` when available subagents were not used
 - `Audit Inputs Provided:` with exact artifact paths, diff basis, changed files, and targeted code references
 
 Delegation rules:
 
 - self-audit is mandatory when subagents are unavailable
+- delegated audit/review is the preferred default when subagents are available and the context bundle is complete
+- if available subagents are not used, the artifact should record an explicit `Delegation Override Reason`
 - delegated audits are invalid unless the subagent receives the full context bundle
 - the required context bundle includes the current phase draft, exact upstream artifacts, relevant addenda, diff basis from `00-worktree.md`, changed file list, targeted code paths, relevant control-plane docs, and phase-specific audit questions
 - if the context bundle is incomplete, do not delegate; perform the audit locally and record `Audit Execution Mode: self-audit`

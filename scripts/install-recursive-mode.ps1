@@ -445,6 +445,11 @@ Resolution rule:
 - If exactly one active/incomplete run exists and no run id is given, resume it.
 - If the user refers to a plan, create a new run only when a unique source plan/requirements artifact can be identified from repo docs or immediate task context.
 - If the command is ambiguous, ask for the run id or the repo path of the source plan/requirements artifact.
+
+Audit delegation rule:
+
+- If subagents are available and the audit/review context bundle is complete, delegated audit/review is the default path.
+- If the controller still chooses `self-audit`, record a concrete `Delegation Override Reason` in the audited phase artifact.
 '@
 }
 

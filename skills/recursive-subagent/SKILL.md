@@ -25,7 +25,7 @@ Use subagents in this order of value:
 5. test reviewer
 6. bounded implementer for truly disjoint write scopes
 
-Do not treat subagents as required infrastructure. They are optional accelerators.
+Do not treat subagents as required infrastructure. They are optional infrastructure, but delegated audit/review is the preferred default when subagents are available and the context bundle is complete.
 
 ## Capability Detection Is A Hard Control Point
 
@@ -40,7 +40,8 @@ If subagents are unavailable:
 If subagents are available:
 
 - record `Subagent Availability: available`
-- decide whether delegation materially helps
+- delegate by default for audit/review work when the context bundle is complete
+- if the controller still chooses `self-audit`, record a concrete `Delegation Override Reason`
 - keep the same audit checklist and acceptance standard
 
 Before delegating, read `/.recursive/memory/skills/SKILLS.md` plus the relevant skill-memory shards for delegated review, review-bundle fit, and stale-context risks.

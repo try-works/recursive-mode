@@ -143,6 +143,7 @@ Audit Execution Mode: self-audit / subagent
 Subagent Availability: available / unavailable
 Subagent Capability Probe: [what proved availability or unavailability]
 Delegation Decision Basis: [why self-audit or delegation was chosen]
+Delegation Override Reason: [required when subagents were available but self-audit was still chosen]
 Audit Inputs Provided:
 - `/.recursive/run/<run-id>/00-requirements.md`
 - `/.recursive/run/<run-id>/00-worktree.md`
@@ -174,6 +175,7 @@ Controller verification rule:
 
 - `Main-Agent Verification Performed` should cite real files or recursive artifacts that exist, not placeholder prose
 - if `Repair Performed After Verification` cites paths, those paths should also exist
+- if `Subagent Availability` is `available` and `Audit Execution Mode` is `self-audit`, `Delegation Override Reason` should state the concrete reason the controller chose not to delegate
 
 ## Worktree Diff Audit
 

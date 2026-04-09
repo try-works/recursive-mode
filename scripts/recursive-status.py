@@ -274,6 +274,22 @@ def has_meaningful_value(value: str | None, *, disallowed: set[str] | None = Non
     return normalized.lower() not in (disallowed or set())
 
 
+def collect_subagent_delegation_blockers(audit_context: str) -> list[str]:
+    blockers: list[str] = []
+    audit_execution_mode = get_md_field_value(audit_context, "Audit Execution Mode")
+    subagent_availability = get_md_field_value(audit_context, "Subagent Availability")
+    override_reason = get_md_field_value(audit_context, "Delegation Override Reason")
+
+    if subagent_availability == "unavailable" and audit_execution_mode == "subagent":
+        blockers.append("Audit Execution Mode cannot be subagent when Subagent Availability is unavailable")
+
+    if subagent_availability == "available" and audit_execution_mode == "self-audit":
+        if not has_meaningful_value(override_reason, disallowed={"n/a", "none"}):
+            blockers.append("Delegation Override Reason is required when available subagents were not used")
+
+    return blockers
+
+
 def collect_paths_under_prefix(text: str, prefix: str) -> list[str]:
     return sorted(path for path in extract_paths_from_text(text) if path.startswith(prefix))
 
@@ -1712,6 +1728,7 @@ def collect_audit_blockers(
             blockers.append("Missing Delegation Decision Basis")
         if get_md_field_value(audit_context, "Audit Inputs Provided") is None and "Audit Inputs Provided:" not in audit_context:
             blockers.append("Missing Audit Inputs Provided")
+        blockers.extend(collect_subagent_delegation_blockers(audit_context))
 
     for heading in AUDIT_REQUIRED_HEADINGS:
         if not get_heading_body(content, heading):

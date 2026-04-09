@@ -336,6 +336,24 @@ def has_meaningful_value(value: str | None, *, disallowed: set[str] | None = Non
     return normalized.lower() not in (disallowed or set())
 
 
+def collect_subagent_delegation_issues(audit_context: str) -> list[str]:
+    issues: list[str] = []
+    audit_execution_mode = get_md_field_value(audit_context, "Audit Execution Mode")
+    subagent_availability = get_md_field_value(audit_context, "Subagent Availability")
+    override_reason = get_md_field_value(audit_context, "Delegation Override Reason")
+
+    if subagent_availability == "unavailable" and audit_execution_mode == "subagent":
+        issues.append("Audit Context cannot claim Audit Execution Mode: subagent when Subagent Availability is unavailable")
+
+    if subagent_availability == "available" and audit_execution_mode == "self-audit":
+        if not has_meaningful_value(override_reason, disallowed={"n/a", "none"}):
+            issues.append(
+                "Audit Context is missing Delegation Override Reason even though subagents were available and self-audit was chosen"
+            )
+
+    return issues
+
+
 def collect_paths_under_prefix(text: str, prefix: str) -> list[str]:
     return sorted(path for path in extract_paths_from_text(text) if path.startswith(prefix))
 
@@ -2046,6 +2064,7 @@ def lint_audit_sections(
             issues.append("Audit Context is missing Delegation Decision Basis")
         if get_md_field_value(audit_context, "Audit Inputs Provided") is None and "Audit Inputs Provided:" not in audit_context:
             issues.append("Audit Context is missing Audit Inputs Provided")
+        issues.extend(collect_subagent_delegation_issues(audit_context))
 
     for heading in AUDIT_REQUIRED_HEADINGS:
         section_body = get_heading_body(content, heading)

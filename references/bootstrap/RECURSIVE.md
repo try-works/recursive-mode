@@ -240,6 +240,7 @@ Mandatory audit recording for every audited phase:
 - `Subagent Availability: available` or `Subagent Availability: unavailable`
 - `Subagent Capability Probe:` with the concrete capability check or environmental fact used
 - `Delegation Decision Basis:` explaining why delegation was or was not used
+- `Delegation Override Reason:` required when `Subagent Availability: available` but `Audit Execution Mode: self-audit`
 - `Audit Inputs Provided:` with the exact artifact paths, diff basis, changed files, and code references used
 
 Every audited phase must also record:
@@ -257,7 +258,9 @@ When delegated work materially contributes, `## Subagent Contribution Verificati
 
 Controller verification references must be real. `Main-Agent Verification Performed` should cite existing files, diff-owned paths, bundles, or recursive artifacts actually checked by the controller, and any paths cited in `Repair Performed After Verification` should also resolve.
 
-If subagents are unavailable, the main agent must perform the same audit itself. Delegation is optional; audit rigor is not.
+If subagents are available and the full context bundle can be assembled, delegated audit/review is the default path.
+If the controller keeps `Audit Execution Mode: self-audit` despite available subagents, it must record `Delegation Override Reason` with the concrete reason the controller chose not to delegate.
+If subagents are unavailable, the main agent must perform the same audit itself. Audit rigor is not optional.
 
 ## Canonical delegated review bundle
 
@@ -582,6 +585,7 @@ Inside `## Audit Context`, record:
 - `Subagent Availability: available` or `Subagent Availability: unavailable`
 - `Subagent Capability Probe:`
 - `Delegation Decision Basis:`
+- `Delegation Override Reason:` when available subagents were not used
 - `Audit Inputs Provided:` followed by explicit artifact paths, diff basis, changed files, and targeted code references
 
 Inside `## Worktree Diff Audit`, record at minimum:
@@ -2529,6 +2533,7 @@ Mandatory audit recording for every audited phase:
 - `Subagent Availability: available` or `Subagent Availability: unavailable`
 - `Subagent Capability Probe:` with the concrete capability check or environmental fact used
 - `Delegation Decision Basis:` explaining why delegation was or was not used
+- `Delegation Override Reason:` required when `Subagent Availability: available` but `Audit Execution Mode: self-audit`
 - `Audit Inputs Provided:` with the exact artifact paths, diff basis, changed files, and code references used
 
 Every audited phase must also record:
@@ -2546,7 +2551,9 @@ When delegated work materially contributes, `## Subagent Contribution Verificati
 
 Controller verification references must be real. `Main-Agent Verification Performed` should cite existing files, diff-owned paths, bundles, or recursive artifacts actually checked by the controller, and any paths cited in `Repair Performed After Verification` should also resolve.
 
-If subagents are unavailable, the main agent must perform the same audit itself. Delegation is optional; audit rigor is not.
+If subagents are available and the full context bundle can be assembled, delegated audit/review is the default path.
+If the controller keeps `Audit Execution Mode: self-audit` despite available subagents, it must record `Delegation Override Reason` with the concrete reason the controller chose not to delegate.
+If subagents are unavailable, the main agent must perform the same audit itself. Audit rigor is not optional.
 
 ## Canonical delegated review bundle
 
@@ -2871,6 +2878,7 @@ Inside `## Audit Context`, record:
 - `Subagent Availability: available` or `Subagent Availability: unavailable`
 - `Subagent Capability Probe:`
 - `Delegation Decision Basis:`
+- `Delegation Override Reason:` when available subagents were not used
 - `Audit Inputs Provided:` followed by explicit artifact paths, diff basis, changed files, and targeted code references
 
 Inside `## Worktree Diff Audit`, record at minimum:

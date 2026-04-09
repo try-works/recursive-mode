@@ -37,6 +37,8 @@ Required recursive-mode audit behavior:
   - changed file list and targeted code references
   - phase-specific audit questions/checklist
 - If the context bundle is incomplete, do not delegate; perform the audit yourself and record `Audit Execution Mode: self-audit`.
+- If subagents are available and the context bundle is complete, delegated audit/review is the default path.
+- If subagents are available but the controller still chooses `self-audit`, record a concrete `Delegation Override Reason`.
 - Do not set `Coverage: PASS` or `Approval: PASS` for an audited phase unless the artifact ends with `Audit: PASS`.
 - Record `Subagent Capability Probe` and `Delegation Decision Basis` in every audited phase.
 - If meaningful subagent work contributes to a phase, require a durable action record under `/.recursive/run/<run-id>/subagents/` and verify it against actual files, actual recursive artifacts, and the actual diff before acceptance. For review/audit delegation, prefer a stable reviewed artifact for `Current Artifact`.
