@@ -164,8 +164,8 @@ Manual bootstrap commands remain the fallback path when the runtime cannot auto-
 
 ```bash
 python "<SKILL_DIR>/scripts/install-recursive-mode.py" --repo-root .
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot .
 bash "<SKILL_DIR>/scripts/install-recursive-mode.sh" --repo-root .
+pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot .
 ```
 
 That creates the reusable `/.recursive/` scaffold, bridge docs, memory routers, and run layout used by the workflow.
@@ -174,6 +174,7 @@ Important boundary:
 
 - `npx skills add ...` installs the skill package into agent directories
 - the target repo scaffold should then be created automatically on first recursive-mode use
+- Python and Bash are first-class bootstrap paths, so macOS and Linux users do not need PowerShell
 - if your runtime supports session-start hooks, the templates under `docs/templates/hooks/` can auto-bootstrap the scaffold at session start
 
 From there, the canonical workflow contract lives in:

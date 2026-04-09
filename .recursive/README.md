@@ -69,9 +69,14 @@ Bootstrap a target repo:
 
 ```bash
 python "<SKILL_DIR>/scripts/install-recursive-mode.py" --repo-root .
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot .
 bash "<SKILL_DIR>/scripts/install-recursive-mode.sh" --repo-root .
+pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot .
 ```
+
+Notes:
+
+- Python and Bash are the primary cross-platform bootstrap paths.
+- PowerShell is optional and mainly relevant on Windows.
 
 Scaffold a run:
 

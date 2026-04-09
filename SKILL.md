@@ -28,22 +28,23 @@ Before doing recursive-mode work, ensure the repo scaffold exists:
 - `/.agent/PLANS.md` bridge doc
 - optional mirrored `AGENTS.md` docs if the repo already uses them
 
-If any of those are missing or stale, the agent should bootstrap the repo automatically before continuing. Do not ask the user to run the bootstrap manually unless no supported Python/PowerShell/shell runtime is available in the environment.
+If any of those are missing or stale, the agent should bootstrap the repo automatically before continuing. Do not ask the user to run the bootstrap manually unless no supported Python or shell runtime is available in the environment. PowerShell is optional, not required.
 
 Preferred bootstrap commands:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
-pwsh -NoProfile -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
+```bash
 python ./scripts/install-recursive-mode.py --repo-root .
 python3 ./scripts/install-recursive-mode.py --repo-root .
 bash ./scripts/install-recursive-mode.sh --repo-root .
+powershell -ExecutionPolicy Bypass -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
+pwsh -NoProfile -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
 ```
 
 Important boundary:
 
 - `npx skills add ...` installs the skill package into agent directories.
 - The target repository scaffold should then be created automatically on first recursive-mode use or via a wired session-start hook.
+- Python and Bash paths are first-class and should work on macOS and Linux without PowerShell.
 - Manual bootstrap commands are the fallback path, not the preferred normal UX.
 
 ## Read Order
