@@ -39,6 +39,10 @@ Every phase output must end with:
 
 Manual QA approval depends on the declared `QA Execution Mode` in the Manual QA artifact. Human and hybrid QA require explicit user sign-off. Agent-operated QA does not.
 
+5) Missing scaffold must be bootstrapped automatically.
+
+If recursive-mode is invoked in a repository that does not yet contain the required `/.recursive/` scaffold and bridge docs, the agent should run the supported bootstrap installer automatically before continuing. Do not require the user to perform a separate manual bootstrap step unless no supported runtime is available to execute the installer.
+
 ## Global artifacts (across all recursive-mode runs)
 
 recursive-mode uses two global documents shared by all requirements:

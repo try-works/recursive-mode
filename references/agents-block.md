@@ -15,6 +15,7 @@ Bridge guidance only:
 - Control-plane docs live under `/.recursive/`.
 - Runs live under `/.recursive/run/<run-id>/`.
 - Durable memory lives under `/.recursive/memory/`.
+- If recursive-mode is invoked in a repo that does not yet contain the `/.recursive/` scaffold, bootstrap it automatically with the supported install script before continuing. Do not require the user to run a separate manual bootstrap step unless no supported runtime is available.
 
 How users can invoke the skill:
 

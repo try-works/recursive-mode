@@ -7,7 +7,33 @@
 
 set -euo pipefail
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+
+bootstrap_recursive_mode() {
+    local repo_root="$1"
+
+    if [ -f "$repo_root/.recursive/RECURSIVE.md" ]; then
+        return 0
+    fi
+
+    echo "Bootstrapping recursive-mode scaffold in $repo_root ..."
+
+    if command -v python3 >/dev/null 2>&1; then
+        python3 "$PLUGIN_ROOT/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
+    fi
+    if command -v python >/dev/null 2>&1; then
+        python "$PLUGIN_ROOT/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
+    fi
+    if command -v pwsh >/dev/null 2>&1; then
+        pwsh -NoProfile -File "$PLUGIN_ROOT/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
+    fi
+    if command -v powershell >/dev/null 2>&1; then
+        powershell -ExecutionPolicy Bypass -File "$PLUGIN_ROOT/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
+    fi
+
+    echo "Warning: Could not auto-bootstrap recursive-mode. Run one of the install-recursive-mode scripts manually."
+    return 1
+}
 
 echo ""
 echo "recursive-mode"
@@ -17,6 +43,7 @@ echo ""
 if git rev-parse --git-dir > /dev/null 2>&1; then
     REPO_ROOT=$(git rev-parse --show-toplevel)
     echo "Repository: $(basename "$REPO_ROOT")"
+    bootstrap_recursive_mode "$REPO_ROOT" || true
 else
     echo "Warning: Not in a git repository. recursive-mode expects version control."
 fi
@@ -32,9 +59,9 @@ echo "  - recursive-subagent   - Parallel execution with fallback"
 echo ""
 
 echo "Quick Start:"
-echo "  1. Create run folder: mkdir -p .recursive/run/<run-id>"
-echo "  2. Write requirements: .recursive/run/<run-id>/00-requirements.md"
-echo "  3. Invoke: 'Implement requirement <run-id>'"
+echo "  1. Write requirements or identify the source plan"
+echo "  2. Invoke: 'Implement the run' or 'Implement requirement <run-id>'"
+echo "  3. recursive-mode should bootstrap missing scaffold automatically before proceeding"
 echo ""
 
 if [ -d ".recursive/run" ] 2>/dev/null; then

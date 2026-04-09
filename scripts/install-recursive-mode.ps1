@@ -552,12 +552,18 @@ if (-not $SkipRecursiveUpdate) {
   if (-not (Test-Path -LiteralPath $canonicalWorkflowPath)) {
     throw "Missing canonical workflow template: $canonicalWorkflowPath"
   }
-  $canonicalBody = (Get-Content -LiteralPath $canonicalWorkflowPath -Raw -Encoding UTF8).TrimEnd("`r", "`n")
-  Upsert-MarkedBlock `
-    -FilePath $recursivePath `
-    -StartMarker $recursiveStartMarker `
-    -EndMarker $recursiveEndMarker `
-    -BlockBody $canonicalBody
+  $canonicalResolved = [System.IO.Path]::GetFullPath($canonicalWorkflowPath)
+  $recursiveResolved = [System.IO.Path]::GetFullPath($recursivePath)
+  if ($canonicalResolved -eq $recursiveResolved) {
+    Write-Output "[INFO] Skipped RECURSIVE.md self-upsert because source and destination are the same file."
+  } else {
+    $canonicalBody = (Get-Content -LiteralPath $canonicalWorkflowPath -Raw -Encoding UTF8).TrimEnd("`r", "`n")
+    Upsert-MarkedBlock `
+      -FilePath $recursivePath `
+      -StartMarker $recursiveStartMarker `
+      -EndMarker $recursiveEndMarker `
+      -BlockBody $canonicalBody
+  }
 } else {
   Write-Output "[INFO] Skipped RECURSIVE.md update by configuration."
 }

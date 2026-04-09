@@ -154,7 +154,13 @@ npx skills add try-works/recursive-mode --skill recursive-tdd --full-depth
 
 ## Quick Start
 
-After installing the skill package into your agent environment, bootstrap a target repository with one of the included installers:
+After installing the skill package into your agent environment, the intended normal flow is:
+
+1. open a target git repository
+2. invoke recursive-mode with a short command such as `Implement the run`
+3. if `/.recursive/` is missing, the skill should auto-bootstrap it before continuing
+
+Manual bootstrap commands remain the fallback path when the runtime cannot auto-run the installer:
 
 ```bash
 python "<SKILL_DIR>/scripts/install-recursive-mode.py" --repo-root .
@@ -163,6 +169,12 @@ bash "<SKILL_DIR>/scripts/install-recursive-mode.sh" --repo-root .
 ```
 
 That creates the reusable `/.recursive/` scaffold, bridge docs, memory routers, and run layout used by the workflow.
+
+Important boundary:
+
+- `npx skills add ...` installs the skill package into agent directories
+- the target repo scaffold should then be created automatically on first recursive-mode use
+- if your runtime supports session-start hooks, the templates under `docs/templates/hooks/` can auto-bootstrap the scaffold at session start
 
 From there, the canonical workflow contract lives in:
 

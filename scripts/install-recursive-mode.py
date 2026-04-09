@@ -47,7 +47,7 @@ def upsert_marked_block(file_path: Path, start_marker: str, end_marker: str, blo
     pattern = re.compile(rf"{re.escape(start_marker)}.*?{re.escape(end_marker)}", re.DOTALL)
 
     if pattern.search(existing):
-        updated = pattern.sub(block, existing)
+        updated = pattern.sub(lambda _match: block, existing)
     elif existing.strip():
         updated = f"{existing.rstrip()}\n\n{block}\n"
     else:
@@ -499,8 +499,11 @@ def main() -> None:
     if not args.skip_recursive_update:
         if not canonical_workflow_path.exists():
             raise FileNotFoundError(f"Missing canonical workflow template: {canonical_workflow_path}")
-        canonical_body = canonical_workflow_path.read_text(encoding="utf-8").rstrip("\r\n")
-        upsert_marked_block(recursive_path, recursive_start_marker, recursive_end_marker, canonical_body)
+        if canonical_workflow_path.resolve() == recursive_path.resolve():
+            print("[INFO] Skipped RECURSIVE.md self-upsert because source and destination are the same file.")
+        else:
+            canonical_body = canonical_workflow_path.read_text(encoding="utf-8").rstrip("\r\n")
+            upsert_marked_block(recursive_path, recursive_start_marker, recursive_end_marker, canonical_body)
     else:
         print("[INFO] Skipped RECURSIVE.md update by configuration.")
 
