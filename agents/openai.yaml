@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Mode"
+  short_description: "Run recursive-mode repo workflows"
+  default_prompt: "Use $recursive-mode to execute a recursive-mode workflow run in this repository."

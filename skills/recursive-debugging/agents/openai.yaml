@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Debugging"
+  short_description: "Root-cause debugging for recursive-mode"
+  default_prompt: "Use $recursive-debugging to perform a recursive-mode Phase 1.5 root-cause analysis for this bug."

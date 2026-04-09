@@ -1,0 +1,8 @@
+{
+  "_note": "Optional template — NOT auto-installed by Skills CLI. If your agent/runtime supports hooks, you may wire this up manually.",
+  "session-start": {
+    "command": "docs/templates/hooks/session-start.sh",
+    "async": false,
+    "description": "Bootstrap recursive-mode context at session start"
+  }
+}

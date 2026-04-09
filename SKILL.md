@@ -1,0 +1,122 @@
+---
+name: recursive-mode
+description: 'Repository workflow orchestration skill for staged implementation, locked artifacts, late-phase receipts, and durable memory maintenance. Use when executing recursive-mode runs, resuming a run, locking a phase, or verifying locks.'
+---
+
+# recursive-mode
+
+## Purpose
+
+Use this skill to run the repository workflow defined in `/.recursive/RECURSIVE.md`.
+
+This file is the installable entrypoint for the skill. It is not the canonical workflow spec.
+For phase order, audit-loop rules, lock rules, addenda, late-phase receipts, state/decisions updates, and memory maintenance, follow `/.recursive/RECURSIVE.md`.
+
+## Bootstrap
+
+Before doing recursive-mode work, ensure the repo scaffold exists:
+
+- `/.recursive/RECURSIVE.md`
+- `/.recursive/STATE.md`
+- `/.recursive/DECISIONS.md`
+- `/.recursive/memory/MEMORY.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/memory/{domains,patterns,incidents,episodes,archive}/`
+- `/.recursive/memory/skills/{availability,usage,issues,patterns}/`
+- `/.recursive/run/`
+- `/.codex/AGENTS.md` primary Codex bridge doc
+- `/.agent/PLANS.md` bridge doc
+- optional mirrored `AGENTS.md` docs if the repo already uses them
+
+If any of those are missing or stale, run one of:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
+pwsh -NoProfile -File ./scripts/install-recursive-mode.ps1 -RepoRoot .
+python ./scripts/install-recursive-mode.py --repo-root .
+python3 ./scripts/install-recursive-mode.py --repo-root .
+bash ./scripts/install-recursive-mode.sh --repo-root .
+```
+
+## Read Order
+
+1. Read `/.recursive/RECURSIVE.md`.
+2. Read `/.codex/AGENTS.md` as the primary Codex bridge if present.
+3. Read any other `AGENTS.md` copies only as mirrored bridge guidance if the repo uses them.
+4. Read `/.agent/PLANS.md` as the primary Codex plans bridge if present.
+5. Read `/.recursive/STATE.md`.
+6. Read `/.recursive/DECISIONS.md`.
+7. Read `/.recursive/memory/MEMORY.md`.
+8. Load only the relevant memory docs under `/.recursive/memory/`.
+
+If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive/RECURSIVE.md`.
+
+## Operational Surface
+
+- Canonical run root: `/.recursive/run/<run-id>/`
+- Canonical workflow spec: `/.recursive/RECURSIVE.md`
+- Canonical state: `/.recursive/STATE.md`
+- Canonical decisions ledger: `/.recursive/DECISIONS.md`
+- Canonical memory router: `/.recursive/memory/MEMORY.md`
+
+## Trigger Examples
+
+- `Implement requirement '<run-id>'`
+- `Run Recursive Phase 2 for .recursive/run/<run-id>/`
+- `Resume requirement '<run-id>' after manual QA`
+- `Verify locks for .recursive/run/<run-id>/`
+
+## Utility Scripts
+
+- `scripts/install-recursive-mode.py`
+- `scripts/install-recursive-mode.ps1`
+- `scripts/install-recursive-mode.sh`
+- `scripts/recursive-init.py`
+- `scripts/recursive-init.ps1`
+- `scripts/recursive-status.py`
+- `scripts/recursive-status.ps1`
+- `scripts/lint-recursive-run.py`
+- `scripts/lint-recursive-run.ps1`
+- `scripts/recursive-review-bundle.py`
+- `scripts/recursive-review-bundle.ps1`
+- `scripts/recursive-subagent-action.py`
+- `scripts/recursive-subagent-action.ps1`
+- `scripts/recursive-lock.py`
+- `scripts/recursive-lock.ps1`
+- `scripts/verify-locks.py`
+- `scripts/verify-locks.ps1`
+- `scripts/check-reusable-repo-hygiene.py`
+- `scripts/check-reusable-repo-hygiene.ps1`
+
+## Subskills
+
+- `skills/recursive-worktree/SKILL.md`
+- `skills/recursive-debugging/SKILL.md`
+- `skills/recursive-tdd/SKILL.md`
+- `skills/recursive-review-bundle/SKILL.md`
+- `skills/recursive-subagent/SKILL.md`
+
+Use those subskills for their specialized discipline, but keep `/.recursive/RECURSIVE.md` as the single source of truth for the overall workflow contract.
+
+For audited phases, the installed workflow requires `draft -> audit -> repair -> re-audit -> pass -> lock`, with `Audit: PASS` required before Coverage/Approval may pass.
+Treat `## Worktree Diff Audit` as phase-scoped: Phase 2 owns planning completeness plus expected product/worktree paths, Phase 3-4 own actual product/worktree drift, Phase 6 owns `/.recursive/DECISIONS.md`, Phase 7 owns `/.recursive/STATE.md`, and Phase 8 owns `/.recursive/memory/**`.
+For Phase 3, declare `TDD Mode: strict|pragmatic`. Strict mode requires concrete RED and GREEN evidence paths. Pragmatic mode requires an explicit exception rationale plus compensating evidence.
+For Phase 5, declare `QA Execution Mode: human|agent-operated|hybrid`. Do not fake human sign-off for agent-operated QA, and do not omit sign-off for human or hybrid QA.
+For delegated review, prefer `scripts/recursive-review-bundle.py` or `scripts/recursive-review-bundle.ps1` so Phase 3.5 records a canonical `Review Bundle Path`.
+If meaningful subagent work contributes to a phase, record it under `/.recursive/run/<run-id>/subagents/` and verify the action record against actual files, actual diffs, and actual recursive artifacts before accepting it. For review/audit delegation, prefer a stable reviewed artifact for `Current Artifact` rather than a mutable draft receipt.
+Audited phases must record `Subagent Capability Probe`, `Delegation Decision Basis`, `## Subagent Contribution Verification`, and `## Requirement Completion Status`.
+Use the stronger requirement disposition fields in `## Requirement Completion Status`: `Changed Files`, `Implementation Evidence`, `Verification Evidence`, `Deferred By`, `Scope Decision`, `Blocking Evidence`, and `Addendum` as appropriate to the chosen status.
+Do not mark `implemented` or `verified` without concrete `Changed Files`. Do not mark `verified` without distinct verification evidence.
+Treat addenda as authoritative effective inputs. When relevant addenda exist, list them under `Inputs`, re-read them in `## Effective Inputs Re-read`, and reconcile them in `## Earlier Phase Reconciliation`.
+Review bundles should include relevant addenda automatically, and the written Phase 3.5 review should cite bundle-grounded upstream artifacts, addenda, and changed files or code refs in the review narrative.
+`00-worktree.md` is the source of truth for diff basis. Record baseline type/reference, comparison reference, normalized baseline/comparison, and normalized diff command; do not silently improvise a different basis later.
+Use Phase 8 to update skill memory under `/.recursive/memory/skills/` when the run teaches the repo something durable about skill availability, fit, delegated-review quality, or skill-discovery outcomes.
+Phase 8 should also capture run-local skill usage before promoting any lesson into durable memory.
+If the run plans delegated review, review bundles, or smoke-harness portability work, read `/.recursive/memory/skills/SKILLS.md` and the relevant skill-memory shards before planning or auditing.
+If the run needs a specialized capability that is not already available, prefer the `find-skills` skill when it exists. Otherwise use the Skills CLI directly (`npx skills find`, `npx skills add`, `npx skills check`, `npx skills update`) and record the result when skill usage is relevant.
+Diff audit ignores incidental runtime byproducts such as `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, and `.ruff_cache/` unless the repo intentionally tracks them.
+Treat Phase 6, Phase 7, and Phase 8 receipts as concise delta receipts that point to the final control-plane docs instead of restating large sections.
+Use `scripts/recursive-lock.py` or `scripts/recursive-lock.ps1` as the normal locking path instead of manually editing `Status`, `LockedAt`, and `LockHash`.
+On Windows, run Node/Vite/Vitest commands from the real worktree path rather than `subst` or mapped-drive aliases.
+When evaluating or building browser-local apps, consult `references/local-first-web-app-checklist.md` for common import/persistence/QA edge cases.
+If the repository being improved is itself a reusable skill/workflow repo, do not commit current-session run folders, evidence logs, review bundles, subagent action records, or temp-path references unless they are intentional fixtures; use `scripts/check-reusable-repo-hygiene.py` or `scripts/check-reusable-repo-hygiene.ps1` before calling the repo clean.

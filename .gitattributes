@@ -1,0 +1,5 @@
+# Normalize skill entrypoint files to LF so cross-platform tooling can reliably
+# detect and parse YAML frontmatter.
+SKILL.md text eol=lf
+skills/*/SKILL.md text eol=lf
+skills/**/SKILL.md text eol=lf

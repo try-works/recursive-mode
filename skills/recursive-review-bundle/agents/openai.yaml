@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Review Bundle"
+  short_description: "Canonical review bundles for audits"
+  default_prompt: "Use $recursive-review-bundle to generate the canonical review bundle for this delegated recursive-mode audit."

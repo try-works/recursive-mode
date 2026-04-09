@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Subagent"
+  short_description: "Delegated audits for recursive-mode"
+  default_prompt: "Use $recursive-subagent to decide whether delegated review helps this recursive-mode phase and to enforce the handoff contract."

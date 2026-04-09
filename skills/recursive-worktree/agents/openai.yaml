@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Worktree"
+  short_description: "Isolated worktrees for recursive-mode"
+  default_prompt: "Use $recursive-worktree to create an isolated worktree before starting this recursive-mode requirement."
