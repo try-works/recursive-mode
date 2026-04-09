@@ -176,6 +176,7 @@ Controller verification rule:
 - `Main-Agent Verification Performed` should cite real files or recursive artifacts that exist, not placeholder prose
 - if `Repair Performed After Verification` cites paths, those paths should also exist
 - if `Subagent Availability` is `available` and `Audit Execution Mode` is `self-audit`, `Delegation Override Reason` should state the concrete reason the controller chose not to delegate
+- these fields may be written inline or as multi-line bullet lists; lint/status should accept either form as long as the cited paths and decisions are concrete
 
 ## Worktree Diff Audit
 

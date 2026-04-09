@@ -327,6 +327,20 @@ def extract_paths_from_named_field(content: str, field_name: str) -> set[str]:
     }
 
 
+def get_named_field_text(content: str, field_name: str) -> str | None:
+    inline_value = get_md_field_value(content, field_name)
+    if inline_value is not None:
+        return inline_value
+
+    pattern = re.compile(
+        rf"(?ms)^[ \t]*(?:[-*][ \t]+)?{re.escape(field_name)}:[ \t]*$\n(.*?)(?=^[ \t]*(?:[-*][ \t]+)?[A-Za-z][^:\n]*:[ \t]*|\Z)"
+    )
+    match = pattern.search(content)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
 def has_meaningful_value(value: str | None, *, disallowed: set[str] | None = None) -> bool:
     if value is None:
         return False
@@ -1351,11 +1365,11 @@ def lint_subagent_contribution_verification(
     audit_context = get_heading_body(content, "Audit Context")
     audit_mode = get_md_field_value(audit_context, "Audit Execution Mode") or ""
     current_phase = get_md_field_value(content, "Phase") or ""
-    reviewed_action_records_field = get_md_field_value(body, "Reviewed Action Records") or ""
-    main_agent_verification = get_md_field_value(body, "Main-Agent Verification Performed") or ""
+    reviewed_action_records_field = get_named_field_text(body, "Reviewed Action Records") or ""
+    main_agent_verification = get_named_field_text(body, "Main-Agent Verification Performed") or ""
     acceptance_decision = trim_md_value(get_md_field_value(body, "Acceptance Decision") or "").lower()
-    refresh_handling = get_md_field_value(body, "Refresh Handling") or ""
-    repair_performed = get_md_field_value(body, "Repair Performed After Verification") or ""
+    refresh_handling = get_named_field_text(body, "Refresh Handling") or ""
+    repair_performed = get_named_field_text(body, "Repair Performed After Verification") or ""
     verification_paths = {
         normalize_repo_path(path)
         for path in extract_paths_from_field_value(main_agent_verification)
