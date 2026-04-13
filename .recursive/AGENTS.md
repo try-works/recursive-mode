@@ -27,6 +27,12 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/.recursive/STATE.md`
   - `/.recursive/DECISIONS.md`
   - `/.recursive/memory/MEMORY.md`
+- Authoring a new recursive-mode spec or `00-requirements.md`:
+  - `/.recursive/STATE.md`
+  - `/.recursive/DECISIONS.md`
+  - `/.recursive/memory/MEMORY.md`
+  - `/skills/recursive-spec/SKILL.md`
+  - relevant code and tests for the requested area
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`

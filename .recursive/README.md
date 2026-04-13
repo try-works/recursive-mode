@@ -21,6 +21,7 @@ If you just need a lightweight routing/index doc for what to read under `/.recur
 Installable entrypoints:
 
 - `/SKILL.md`
+- `/skills/recursive-spec/SKILL.md`
 - `/skills/recursive-worktree/SKILL.md`
 - `/skills/recursive-debugging/SKILL.md`
 - `/skills/recursive-tdd/SKILL.md`

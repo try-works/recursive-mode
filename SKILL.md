@@ -99,6 +99,7 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 
 ## Subskills
 
+- `skills/recursive-spec/SKILL.md`
 - `skills/recursive-worktree/SKILL.md`
 - `skills/recursive-debugging/SKILL.md`
 - `skills/recursive-tdd/SKILL.md`

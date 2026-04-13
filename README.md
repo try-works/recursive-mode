@@ -8,24 +8,37 @@ It gives an agent a file-backed workflow for requirements, planning, implementat
 
 - people who want a stricter, auditable agent workflow inside a repo
 - teams who want requirements and implementation evidence recorded in files
-- users who want installable subskills for worktrees, debugging, TDD, delegated review, and subagent support
+- users who want installable subskills for requirements/spec authoring, worktrees, debugging, TDD, delegated review, and subagent support
 
 ## What It Includes
 
 This repo currently ships these installable skills:
 
 - `recursive-mode`
+- `recursive-spec`
 - `recursive-worktree`
 - `recursive-debugging`
 - `recursive-tdd`
 - `recursive-review-bundle`
 - `recursive-subagent`
 
+## Included Subskills
+
+| Skill | Purpose |
+| --- | --- |
+| `recursive-spec` | Co-authors repo-aware requirements for a new run from plan/spec prompts, keeps the draft outside the repo until approval, then creates the run and writes `00-requirements.md`. |
+| `recursive-worktree` | Sets up an isolated worktree before implementation starts. |
+| `recursive-debugging` | Adds structured root-cause analysis before fixing bugs or failing tests. |
+| `recursive-tdd` | Enforces RED-GREEN-REFACTOR discipline for implementation work. |
+| `recursive-review-bundle` | Builds canonical review bundles for delegated Phase 3.5 review. |
+| `recursive-subagent` | Helps delegate bounded implementation, audit, or review work and verify the results. |
+
 ## Functionality
 
 The workflow package includes functionality for:
 
 - turning a repo task into a staged, file-backed implementation run
+- co-authoring repo-aware requirements/specs before creating a new run
 - capturing requirements, analysis, plans, implementation evidence, and validation in durable artifacts
 - enforcing audited phase progression with explicit pass/lock behavior
 - isolating work in a dedicated git worktree before implementation begins
@@ -149,7 +162,7 @@ npx skills add try-works/recursive-mode --skill '*' --full-depth
 Install a single subskill:
 
 ```bash
-npx skills add try-works/recursive-mode --skill recursive-tdd --full-depth
+npx skills add try-works/recursive-mode --skill recursive-spec --full-depth
 ```
 
 ## Quick Start
@@ -157,8 +170,11 @@ npx skills add try-works/recursive-mode --skill recursive-tdd --full-depth
 After installing the skill package into your agent environment, the intended normal flow is:
 
 1. open a target git repository
-2. invoke recursive-mode with a short command such as `Implement the run`
-3. if `/.recursive/` is missing, the skill should auto-bootstrap it before continuing
+2. if requirements do not exist yet, use `recursive-spec` to draft them from plan/spec prompts such as `create a plan`, `help me plan`, or `create a spec`
+3. invoke recursive-mode with a short command such as `Implement the run`
+4. if `/.recursive/` is missing, the skill should auto-bootstrap it before continuing
+
+`recursive-spec` is intentionally approval-gated: it should collaborate on the draft first, keep that draft in temporary/session storage, and only create `/.recursive/run/<run-id>/00-requirements.md` after the user approves the spec.
 
 Manual bootstrap commands remain the fallback path when the runtime cannot auto-run the installer:
 

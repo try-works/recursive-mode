@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Spec"
+  short_description: "Repo-aware requirements authoring for new runs"
+  default_prompt: "Use $recursive-spec to co-author a repo-aware 00-requirements.md for a new recursive-mode run."

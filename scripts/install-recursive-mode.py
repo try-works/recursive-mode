@@ -355,6 +355,12 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/.recursive/STATE.md`
   - `/.recursive/DECISIONS.md`
   - `/.recursive/memory/MEMORY.md`
+- Authoring a new recursive-mode spec or `00-requirements.md`:
+  - `/.recursive/STATE.md`
+  - `/.recursive/DECISIONS.md`
+  - `/.recursive/memory/MEMORY.md`
+  - `/skills/recursive-spec/SKILL.md`
+  - relevant code and tests for the requested area
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`
@@ -409,6 +415,11 @@ Resolution rule:
 - If exactly one active/incomplete run exists and no run id is given, resume it.
 - If the user refers to a plan, create a new run only when a unique source plan/requirements artifact can be identified from repo docs or immediate task context.
 - If the command is ambiguous, ask for the run id or the repo path of the source plan/requirements artifact.
+
+Spec-authoring rule:
+
+- If the user asks to create a plan, help plan, create a spec, or write requirements for a new recursive run, prefer `recursive-spec` before orchestration.
+- `recursive-spec` should confirm the user wants spec help, ask what they want to do, read `STATE.md`, `DECISIONS.md`, `MEMORY.md`, and relevant code/tests, keep the draft in temporary non-repo storage, then create the new run only after the requirements are approved.
 
 Audit delegation rule:
 
