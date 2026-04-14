@@ -31,6 +31,11 @@ Spec-authoring rule:
 - If the user asks to create a plan, help plan, create a spec, or write requirements for a new recursive run, prefer `recursive-spec` before orchestration.
 - `recursive-spec` should confirm the user wants spec help, ask what they want to do, read `STATE.md`, `DECISIONS.md`, `MEMORY.md`, and relevant code/tests, keep the draft in temporary non-repo storage, then create the new run only after the requirements are approved.
 
+Benchmark rule:
+
+- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, prefer `recursive-benchmark`.
+- `recursive-benchmark` should use the packaged benchmark fixture, create paired disposable repos, keep the benchmark requirements aligned across both arms, capture logs and timings, and write a final comparison report.
+
 Audit delegation rule:
 
 - If subagents are available and the audit/review context bundle is complete, delegated audit/review is the default path.

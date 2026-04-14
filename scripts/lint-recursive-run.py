@@ -13,8 +13,10 @@ import sys
 from pathlib import Path
 
 
+CURRENT_WORKFLOW_PROFILE = "recursive-mode-audit-v2"
 STRICT_WORKFLOW_PROFILE = "recursive-mode-audit-v1"
 COMPAT_WORKFLOW_PROFILE = "memory-phase8"
+STRICT_WORKFLOW_PROFILES = {CURRENT_WORKFLOW_PROFILE, STRICT_WORKFLOW_PROFILE}
 LATE_PHASE_ARTIFACTS = ["06-decisions-update.md", "07-state-update.md", "08-memory-impact.md"]
 AUDITED_PHASE_FILES = {
     "01-as-is.md",
@@ -99,6 +101,16 @@ TRANSIENT_RUNTIME_FILE_NAMES = {".ds_store", "thumbs.db"}
 TRANSIENT_RUNTIME_SUFFIXES = (".pyc", ".pyo", ".pyd")
 DIFF_BASIS_ALLOWED_TYPES = {"local commit", "local branch", "remote ref", "merge-base derived"}
 WORKING_TREE_COMPARISON_REFS = {"working-tree", "working-tree@head", "worktree", "working-tree+head"}
+INVENTORY_DISPOSITIONS = {"in-scope", "out-of-scope", "constraint", "quality-gate"}
+PHASE2_REQUIREMENT_DISPOSITION_STATUSES = {
+    "planned",
+    "planned-via-merge",
+    "planned-indirectly",
+    "deferred",
+    "out-of-scope",
+    "blocked",
+    "superseded by approved addendum",
+}
 REQUIREMENT_DISPOSITION_STATUSES = {
     "implemented",
     "verified",
@@ -143,6 +155,7 @@ RUN_ARTIFACT_SEQUENCE = [
     "07-state-update.md",
     "08-memory-impact.md",
 ]
+REQUIREMENT_ID_RE = re.compile(r"^(R\d+|SRC-\d{3})$")
 
 
 def write_issue(severity: str, file_path: Path, message: str, remediation_lines: list[str] | None = None) -> None:
@@ -256,6 +269,8 @@ def get_workflow_profile(run_dir: Path) -> str:
     if requirements_path.exists():
         content = requirements_path.read_text(encoding="utf-8")
         workflow_version = get_md_field_value(content, "Workflow version")
+        if workflow_version == CURRENT_WORKFLOW_PROFILE:
+            return CURRENT_WORKFLOW_PROFILE
         if workflow_version == STRICT_WORKFLOW_PROFILE:
             return STRICT_WORKFLOW_PROFILE
         if workflow_version == COMPAT_WORKFLOW_PROFILE:
@@ -278,6 +293,118 @@ def parse_requirement_ids(requirements_content: str) -> list[str]:
     requirements_body = get_heading_body(requirements_content, "Requirements") or requirements_content
     ids = sorted(set(re.findall(r"\bR\d+\b", requirements_body)), key=lambda value: int(value[1:]))
     return ids
+
+
+def requirement_sort_key(value: str) -> tuple[int, int | str, str]:
+    if re.fullmatch(r"R\d+", value):
+        return (0, int(value[1:]), value)
+    if re.fullmatch(r"SRC-\d{3}", value):
+        return (1, int(value.split("-", 1)[1]), value)
+    return (2, value, value)
+
+
+def normalize_source_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.replace("`", "").replace('"', "").strip()).strip().lower()
+
+
+def source_quote_matches(source_quote: str, requirements_content: str) -> bool:
+    normalized_quote = normalize_source_text(source_quote)
+    normalized_requirements = normalize_source_text(requirements_content)
+    return bool(normalized_quote) and normalized_quote in normalized_requirements
+
+
+def parse_source_requirement_inventory_entries(section_body: str) -> tuple[dict[str, dict[str, str]], list[str]]:
+    entries: dict[str, dict[str, str]] = {}
+    issues: list[str] = []
+    for raw_line in section_body.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(("-", "*")):
+            continue
+        body = trim_md_value(line[1:].strip())
+        parts = [trim_md_value(part.strip()) for part in body.split("|") if part.strip()]
+        if len(parts) < 2:
+            continue
+        requirement_id = trim_md_value(parts[0])
+        if not REQUIREMENT_ID_RE.fullmatch(requirement_id):
+            continue
+        fields: dict[str, str] = {"Requirement ID": requirement_id}
+        for part in parts[1:]:
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            fields[key.strip()] = trim_md_value(value.strip())
+        if requirement_id in entries:
+            issues.append(f"Source Requirement Inventory contains duplicate entries for {requirement_id}")
+            continue
+        entries[requirement_id] = fields
+    return entries, issues
+
+
+def parse_requirement_mapping_entries(section_body: str) -> tuple[dict[str, dict[str, str]], list[str]]:
+    entries: dict[str, dict[str, str]] = {}
+    issues: list[str] = []
+    for raw_line in section_body.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(("-", "*")):
+            continue
+        body = trim_md_value(line[1:].strip())
+        parts = [trim_md_value(part.strip()) for part in body.split("|") if part.strip()]
+        if len(parts) < 2:
+            continue
+        requirement_id = trim_md_value(parts[0])
+        if not REQUIREMENT_ID_RE.fullmatch(requirement_id):
+            continue
+        fields: dict[str, str] = {"Requirement ID": requirement_id}
+        for part in parts[1:]:
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            fields[key.strip()] = trim_md_value(value.strip())
+        if requirement_id in entries:
+            issues.append(f"Requirement Mapping contains duplicate entries for {requirement_id}")
+            continue
+        entries[requirement_id] = fields
+    return entries, issues
+
+
+def get_run_requirement_ids(run_dir: Path, workflow_profile: str) -> list[str]:
+    requirements_path = run_dir / "00-requirements.md"
+    explicit_ids: list[str] = []
+    if requirements_path.exists():
+        explicit_ids = parse_requirement_ids(requirements_path.read_text(encoding="utf-8"))
+    if workflow_profile == CURRENT_WORKFLOW_PROFILE:
+        phase1_path = run_dir / "01-as-is.md"
+        if phase1_path.exists():
+            inventory_body = get_heading_body(phase1_path.read_text(encoding="utf-8"), "Source Requirement Inventory")
+            if inventory_body:
+                entries, _issues = parse_source_requirement_inventory_entries(inventory_body)
+                if entries:
+                    return sorted(entries.keys(), key=requirement_sort_key)
+    return explicit_ids
+
+
+def validate_planned_surface_paths(
+    requirement_id: str,
+    field_name: str,
+    raw_value: str,
+    repo_root: Path,
+) -> list[str]:
+    issues: list[str] = []
+    extracted_paths = collect_requirement_field_paths({field_name: raw_value}, [field_name])
+    if not extracted_paths:
+        issues.append(f"Requirement {requirement_id} {field_name} must cite concrete repo paths or file names")
+        return issues
+    unresolved: list[str] = []
+    for path in sorted(extracted_paths):
+        candidate = repo_root / path
+        if candidate.exists():
+            continue
+        if candidate.parent.exists():
+            continue
+        unresolved.append(path)
+    if unresolved:
+        issues.append(f"Requirement {requirement_id} {field_name} contains unresolved planned path(s): {', '.join(unresolved[:5])}")
+    return issues
 
 
 def extract_paths_from_text(text: str) -> set[str]:
@@ -751,7 +878,7 @@ def get_expected_effective_input_addenda_paths(run_dir: Path, file_name: str) ->
 
 
 def lint_effective_input_addenda(file_path: Path, content: str, workflow_profile: str, run_dir: Path) -> list[str]:
-    if workflow_profile not in {STRICT_WORKFLOW_PROFILE, COMPAT_WORKFLOW_PROFILE}:
+    if workflow_profile not in (STRICT_WORKFLOW_PROFILES | {COMPAT_WORKFLOW_PROFILE}):
         return []
     if is_addendum_artifact(file_path.name):
         return []
@@ -766,7 +893,7 @@ def lint_effective_input_addenda(file_path: Path, content: str, workflow_profile
     if missing_inputs:
         issues.append(f"Inputs is missing relevant addenda: {', '.join(missing_inputs[:5])}")
 
-    if workflow_profile == STRICT_WORKFLOW_PROFILE and file_path.name in AUDITED_PHASE_FILES:
+    if workflow_profile in STRICT_WORKFLOW_PROFILES and file_path.name in AUDITED_PHASE_FILES:
         reread_paths = {normalize_repo_path(path) for path in extract_paths_from_text(get_heading_body(content, 'Effective Inputs Re-read'))}
         missing_reread = [path for path in expected_addenda if path not in reread_paths]
         if missing_reread:
@@ -787,19 +914,19 @@ def parse_requirement_completion_entries(section_body: str) -> tuple[dict[str, d
         line = raw_line.strip()
         if not line.startswith(("-", "*")):
             continue
-        body = line[1:].strip()
-        parts = [part.strip() for part in body.split("|") if part.strip()]
+        body = trim_md_value(line[1:].strip())
+        parts = [trim_md_value(part.strip()) for part in body.split("|") if part.strip()]
         if len(parts) < 2:
             continue
-        requirement_id = parts[0]
-        if not re.fullmatch(r"R\d+", requirement_id):
+        requirement_id = trim_md_value(parts[0])
+        if not REQUIREMENT_ID_RE.fullmatch(requirement_id):
             continue
         fields: dict[str, str] = {"Requirement ID": requirement_id}
         for part in parts[1:]:
             if ":" not in part:
                 continue
             key, value = part.split(":", 1)
-            fields[key.strip()] = value.strip()
+            fields[key.strip()] = trim_md_value(value.strip())
         if requirement_id in entries:
             issues.append(f"Requirement Completion Status contains duplicate entries for {requirement_id}")
             continue
@@ -1017,6 +1144,209 @@ def lint_requirement_disposition_fields(
     return issues
 
 
+def lint_source_requirement_inventory(file_path: Path, content: str, workflow_profile: str, run_dir: Path) -> list[str]:
+    if workflow_profile != CURRENT_WORKFLOW_PROFILE or file_path.name != "01-as-is.md":
+        return []
+
+    issues: list[str] = []
+    requirements_path = run_dir / "00-requirements.md"
+    requirements_content = requirements_path.read_text(encoding="utf-8") if requirements_path.exists() else ""
+    body = get_heading_body(content, "Source Requirement Inventory")
+    if not body:
+        return ["Missing or empty section: ## Source Requirement Inventory"]
+
+    entries, entry_issues = parse_source_requirement_inventory_entries(body)
+    issues.extend(entry_issues)
+    if not entries:
+        issues.append("Source Requirement Inventory must contain at least one requirement inventory entry")
+        return sorted(set(issues))
+
+    explicit_ids = parse_requirement_ids(requirements_content)
+    missing_explicit = [requirement_id for requirement_id in explicit_ids if requirement_id not in entries]
+    if missing_explicit:
+        issues.append(f"Source Requirement Inventory is missing explicit requirement IDs from 00-requirements.md: {', '.join(missing_explicit)}")
+
+    for requirement_id, fields in entries.items():
+        disposition = trim_md_value(fields.get("Disposition", "")).lower()
+        source_quote = fields.get("Source Quote", "")
+        summary = fields.get("Summary", "")
+        if disposition not in INVENTORY_DISPOSITIONS:
+            issues.append(f"Source Requirement Inventory for {requirement_id} has invalid Disposition '{fields.get('Disposition', '')}'")
+        if not is_meaningful_requirement_field(source_quote):
+            issues.append(f"Source Requirement Inventory for {requirement_id} is missing Source Quote")
+        elif not source_quote_matches(source_quote, requirements_content):
+            issues.append(f"Source Requirement Inventory for {requirement_id} cites a Source Quote that does not appear in 00-requirements.md")
+        if not is_meaningful_requirement_field(summary):
+            issues.append(f"Source Requirement Inventory for {requirement_id} is missing Summary")
+
+    return sorted(set(issues))
+
+
+def lint_requirement_mapping(content: str, workflow_profile: str, run_dir: Path, repo_root: Path) -> list[str]:
+    if workflow_profile != CURRENT_WORKFLOW_PROFILE:
+        return []
+
+    issues: list[str] = []
+    phase1_path = run_dir / "01-as-is.md"
+    requirements_path = run_dir / "00-requirements.md"
+    if not phase1_path.exists() or not requirements_path.exists():
+        return ["Requirement Mapping requires existing 00-requirements.md and 01-as-is.md inputs"]
+
+    inventory_body = get_heading_body(phase1_path.read_text(encoding="utf-8"), "Source Requirement Inventory")
+    if not inventory_body:
+        return ["Requirement Mapping requires 01-as-is.md to contain ## Source Requirement Inventory"]
+    inventory_entries, inventory_issues = parse_source_requirement_inventory_entries(inventory_body)
+    issues.extend(inventory_issues)
+
+    body = get_heading_body(content, "Requirement Mapping")
+    if not body:
+        issues.append("Missing or empty section: ## Requirement Mapping")
+        return sorted(set(issues))
+
+    mapping_entries, mapping_issues = parse_requirement_mapping_entries(body)
+    issues.extend(mapping_issues)
+    missing_entries = [requirement_id for requirement_id in inventory_entries if requirement_id not in mapping_entries]
+    if missing_entries:
+        issues.append(f"Requirement Mapping is missing source inventory items: {', '.join(missing_entries)}")
+
+    requirements_content = requirements_path.read_text(encoding="utf-8")
+    for requirement_id, fields in mapping_entries.items():
+        coverage = trim_md_value(fields.get("Coverage", "")).lower()
+        source_quote = fields.get("Source Quote", "")
+        implementation_surface = fields.get("Implementation Surface", "")
+        verification_surface = fields.get("Verification Surface", "")
+        qa_surface = fields.get("QA Surface", "")
+        rationale = fields.get("Rationale", "") or fields.get("Merge Rationale", "")
+
+        if coverage not in {"direct", "merged", "indirect", "deferred", "out-of-scope", "blocked"}:
+            issues.append(f"Requirement Mapping for {requirement_id} has invalid Coverage '{fields.get('Coverage', '')}'")
+            continue
+        if not is_meaningful_requirement_field(source_quote):
+            issues.append(f"Requirement Mapping for {requirement_id} is missing Source Quote")
+        elif requirement_id in inventory_entries:
+            inventory_quote = inventory_entries[requirement_id].get("Source Quote", "")
+            if normalize_source_text(source_quote) != normalize_source_text(inventory_quote):
+                issues.append(f"Requirement Mapping for {requirement_id} must preserve the Source Quote recorded in Source Requirement Inventory")
+        elif not source_quote_matches(source_quote, requirements_content):
+            issues.append(f"Requirement Mapping for {requirement_id} cites a Source Quote that does not appear in 00-requirements.md")
+
+        if coverage in {"direct", "merged", "indirect"}:
+            if not is_meaningful_requirement_field(implementation_surface):
+                issues.append(f"Requirement Mapping for {requirement_id} is missing Implementation Surface")
+            else:
+                issues.extend(validate_planned_surface_paths(requirement_id, "Implementation Surface", implementation_surface, repo_root))
+            if not is_meaningful_requirement_field(verification_surface):
+                issues.append(f"Requirement Mapping for {requirement_id} is missing Verification Surface")
+            if not is_meaningful_requirement_field(qa_surface):
+                issues.append(f"Requirement Mapping for {requirement_id} is missing QA Surface")
+        if coverage == "merged" and not is_meaningful_requirement_field(rationale):
+            issues.append(f"Requirement Mapping for {requirement_id} with Coverage merged must cite Merge Rationale or Rationale")
+        if coverage == "indirect" and not is_meaningful_requirement_field(rationale):
+            issues.append(f"Requirement Mapping for {requirement_id} with Coverage indirect must cite Rationale")
+        if coverage in {"deferred", "out-of-scope", "blocked"} and not is_meaningful_requirement_field(rationale):
+            issues.append(f"Requirement Mapping for {requirement_id} with Coverage {coverage} must cite Rationale")
+
+    return sorted(set(issues))
+
+
+def lint_plan_drift_check(content: str, workflow_profile: str) -> list[str]:
+    if workflow_profile != CURRENT_WORKFLOW_PROFILE:
+        return []
+    body = get_heading_body(content, "Plan Drift Check")
+    if not body:
+        return ["Missing or empty section: ## Plan Drift Check"]
+    if re.search(r"\bmerge\b", body, re.IGNORECASE) and not re.search(r"\brationale\b", body, re.IGNORECASE):
+        return ["Plan Drift Check mentions merged obligations without explaining why the merge is lossless"]
+    return []
+
+
+def lint_phase2_requirement_disposition_fields(
+    requirement_id: str,
+    status: str,
+    fields: dict[str, str],
+    run_dir: Path,
+    repo_root: Path,
+) -> list[str]:
+    issues: list[str] = []
+    allowed_fields_by_status = {
+        "planned": {"Implementation Surface", "Verification Surface", "QA Surface", "Audit Note"},
+        "planned-via-merge": {"Implementation Surface", "Verification Surface", "QA Surface", "Rationale", "Audit Note"},
+        "planned-indirectly": {"Implementation Surface", "Verification Surface", "QA Surface", "Rationale", "Audit Note"},
+        "deferred": {"Rationale", "Deferred By", "Addendum", "Audit Note"},
+        "out-of-scope": {"Rationale", "Scope Decision", "Addendum", "Audit Note"},
+        "blocked": {"Rationale", "Blocking Evidence", "Audit Note"},
+        "superseded by approved addendum": {"Addendum", "Audit Note"},
+    }
+    meaningful_fields = collect_meaningful_requirement_fields(fields)
+    unexpected_fields = sorted(set(meaningful_fields) - allowed_fields_by_status[status])
+    if unexpected_fields:
+        issues.append(
+            f"Requirement {requirement_id} with Status {status} contains contradictory field(s): "
+            + ", ".join(unexpected_fields)
+        )
+
+    if status in {"planned", "planned-via-merge", "planned-indirectly"}:
+        implementation_surface = fields.get("Implementation Surface", "")
+        verification_surface = fields.get("Verification Surface", "")
+        qa_surface = fields.get("QA Surface", "")
+        rationale = fields.get("Rationale", "")
+        if not is_meaningful_requirement_field(implementation_surface):
+            issues.append(f"Requirement {requirement_id} with Status {status} must cite Implementation Surface")
+        else:
+            issues.extend(validate_planned_surface_paths(requirement_id, "Implementation Surface", implementation_surface, repo_root))
+        if not is_meaningful_requirement_field(verification_surface):
+            issues.append(f"Requirement {requirement_id} with Status {status} must cite Verification Surface")
+        if not is_meaningful_requirement_field(qa_surface):
+            issues.append(f"Requirement {requirement_id} with Status {status} must cite QA Surface")
+        if status in {"planned-via-merge", "planned-indirectly"} and not is_meaningful_requirement_field(rationale):
+            issues.append(f"Requirement {requirement_id} with Status {status} must cite Rationale")
+    elif status == "deferred":
+        deferred_by = fields.get("Deferred By", "") or fields.get("Addendum", "")
+        deferred_paths = collect_requirement_field_paths(fields, ["Deferred By", "Addendum"])
+        if not is_meaningful_requirement_field(fields.get("Rationale", "")):
+            issues.append(f"Requirement {requirement_id} with Status deferred is missing Rationale")
+        if not is_meaningful_requirement_field(deferred_by):
+            issues.append(f"Requirement {requirement_id} with Status deferred must cite Deferred By or Addendum")
+        elif not deferred_paths:
+            issues.append(f"Requirement {requirement_id} with Status deferred must cite an approved deferral path")
+        else:
+            missing = find_missing_repo_paths(repo_root, sorted(deferred_paths))
+            if missing:
+                issues.append(f"Requirement {requirement_id} deferral reference path(s) do not exist: {', '.join(missing[:5])}")
+    elif status == "out-of-scope":
+        scope_decision = fields.get("Scope Decision", "") or fields.get("Addendum", "")
+        scope_paths = collect_requirement_field_paths(fields, ["Scope Decision", "Addendum"])
+        if not is_meaningful_requirement_field(fields.get("Rationale", "")):
+            issues.append(f"Requirement {requirement_id} with Status out-of-scope is missing Rationale")
+        if not is_meaningful_requirement_field(scope_decision):
+            issues.append(f"Requirement {requirement_id} with Status out-of-scope must cite Scope Decision or Addendum")
+        elif not scope_paths:
+            issues.append(f"Requirement {requirement_id} with Status out-of-scope must cite an approved scope decision path")
+        else:
+            missing = find_missing_repo_paths(repo_root, sorted(scope_paths))
+            if missing:
+                issues.append(f"Requirement {requirement_id} scope decision path(s) do not exist: {', '.join(missing[:5])}")
+    elif status == "blocked":
+        blocking_evidence = fields.get("Blocking Evidence", "")
+        blocking_paths = collect_requirement_field_paths(fields, ["Blocking Evidence"])
+        if not is_meaningful_requirement_field(fields.get("Rationale", "")):
+            issues.append(f"Requirement {requirement_id} with Status blocked is missing Rationale")
+        if not is_meaningful_requirement_field(blocking_evidence):
+            issues.append(f"Requirement {requirement_id} with Status blocked must cite Blocking Evidence")
+        elif not blocking_paths:
+            issues.append(f"Requirement {requirement_id} with Status blocked must cite file, artifact, or evidence paths in Blocking Evidence")
+    elif status == "superseded by approved addendum":
+        addendum_path = normalize_repo_path(fields.get("Addendum", ""))
+        if not addendum_path:
+            issues.append(f"Requirement {requirement_id} superseded by approved addendum must cite Addendum")
+        elif not addendum_path.startswith(f".recursive/run/{run_dir.name}/addenda/"):
+            issues.append(f"Requirement {requirement_id} addendum reference must live under the current run addenda/")
+        elif not (repo_root / addendum_path).exists():
+            issues.append(f"Requirement {requirement_id} addendum reference does not exist: {addendum_path}")
+
+    return issues
+
+
 def lint_requirement_completion_status(
     file_path: Path,
     content: str,
@@ -1025,7 +1355,7 @@ def lint_requirement_completion_status(
     workflow_profile: str,
     actual_changed_files: list[str] | None,
 ) -> list[str]:
-    if workflow_profile != STRICT_WORKFLOW_PROFILE or file_path.name not in AUDITED_PHASE_FILES:
+    if workflow_profile not in STRICT_WORKFLOW_PROFILES or file_path.name not in AUDITED_PHASE_FILES:
         return []
 
     body = get_heading_body(content, "Requirement Completion Status")
@@ -1036,6 +1366,25 @@ def lint_requirement_completion_status(
     missing = [requirement_id for requirement_id in requirement_ids if requirement_id not in entries]
     if missing:
         issues.append(f"Requirement Completion Status is missing in-scope requirements: {', '.join(missing)}")
+
+    if workflow_profile == CURRENT_WORKFLOW_PROFILE and file_path.name == "02-to-be-plan.md":
+        for requirement_id, fields in entries.items():
+            status = trim_md_value(fields.get("Status", "")).lower()
+            if status not in PHASE2_REQUIREMENT_DISPOSITION_STATUSES:
+                issues.append(
+                    f"Requirement Completion Status for {requirement_id} has invalid Phase 2 Status '{fields.get('Status', '')}'"
+                )
+                continue
+            issues.extend(
+                lint_phase2_requirement_disposition_fields(
+                    requirement_id,
+                    status,
+                    fields,
+                    run_dir,
+                    run_dir.parent.parent.parent,
+                )
+            )
+        return sorted(set(issues))
 
     for requirement_id, fields in entries.items():
         status = trim_md_value(fields.get("Status", "")).lower()
@@ -1076,7 +1425,7 @@ def lint_requirement_completion_status(
 
 
 def lint_prior_recursive_evidence(content: str, run_dir: Path, workflow_profile: str, repo_root: Path, file_name: str) -> list[str]:
-    if workflow_profile != STRICT_WORKFLOW_PROFILE or file_name not in PRIOR_RECURSIVE_EVIDENCE_FILES:
+    if workflow_profile not in STRICT_WORKFLOW_PROFILES or file_name not in PRIOR_RECURSIVE_EVIDENCE_FILES:
         return []
 
     body = get_heading_body(content, "Prior Recursive Evidence Reviewed")
@@ -1352,7 +1701,7 @@ def lint_subagent_contribution_verification(
     repo_root: Path,
     actual_changed_files: list[str] | None,
 ) -> list[str]:
-    if workflow_profile != STRICT_WORKFLOW_PROFILE or file_path.name not in AUDITED_PHASE_FILES:
+    if workflow_profile not in STRICT_WORKFLOW_PROFILES or file_path.name not in AUDITED_PHASE_FILES:
         return []
 
     body = get_heading_body(content, "Subagent Contribution Verification")
@@ -1676,6 +2025,10 @@ def lint_phase_specific_rules(
 ) -> list[str]:
     issues: list[str] = []
     issues.extend(lint_effective_input_addenda(file_path, content, workflow_profile, run_dir))
+    issues.extend(lint_source_requirement_inventory(file_path, content, workflow_profile, run_dir))
+    if file_path.name == "02-to-be-plan.md":
+        issues.extend(lint_requirement_mapping(content, workflow_profile, run_dir, repo_root))
+        issues.extend(lint_plan_drift_check(content, workflow_profile))
     issues.extend(
         lint_requirement_completion_status(
             file_path,
@@ -1697,7 +2050,7 @@ def lint_phase_specific_rules(
             actual_changed_files,
         )
     )
-    if workflow_profile != STRICT_WORKFLOW_PROFILE:
+    if workflow_profile not in STRICT_WORKFLOW_PROFILES:
         return issues
 
     if file_path.name == "00-worktree.md":
@@ -1830,6 +2183,7 @@ def get_artifact_required_sections(file_name: str, workflow_profile: str) -> lis
             "TODO",
             "Reproduction Steps (Novice-Runnable)",
             "Current Behavior by Requirement",
+            "Source Requirement Inventory",
             "Relevant Code Pointers",
             "Known Unknowns",
             "Evidence",
@@ -1854,12 +2208,14 @@ def get_artifact_required_sections(file_name: str, workflow_profile: str) -> lis
         "02-to-be-plan.md": [
             "TODO",
             "Planned Changes by File",
+            "Requirement Mapping",
             "Implementation Steps",
             "Testing Strategy",
             "Playwright Plan (if applicable)",
             "Manual QA Scenarios",
             "Idempotence and Recovery",
             "Implementation Sub-phases",
+            "Plan Drift Check",
             "Traceability",
             "Coverage Gate",
             "Approval Gate",
@@ -1944,7 +2300,7 @@ def get_artifact_required_sections(file_name: str, workflow_profile: str) -> lis
         ],
     }
     headings = list(section_map.get(file_name, ["TODO", "Coverage Gate", "Approval Gate"]))
-    if workflow_profile == STRICT_WORKFLOW_PROFILE and file_name in AUDITED_PHASE_FILES:
+    if workflow_profile in STRICT_WORKFLOW_PROFILES and file_name in AUDITED_PHASE_FILES:
         headings.extend(AUDIT_REQUIRED_HEADINGS)
         if file_name in PRIOR_RECURSIVE_EVIDENCE_FILES:
             headings.append("Prior Recursive Evidence Reviewed")
@@ -1982,16 +2338,16 @@ def is_lock_valid_for_lint(file_path: Path, workflow_profile: str) -> bool:
     content = file_path.read_text(encoding="utf-8")
     status = get_md_field_value(content, "Status") or ""
     has_todo, _, _, unchecked = get_todo_stats(content)
-    audit_required = workflow_profile == STRICT_WORKFLOW_PROFILE and file_path.name in AUDITED_PHASE_FILES
+    audit_required = workflow_profile in STRICT_WORKFLOW_PROFILES and file_path.name in AUDITED_PHASE_FILES
     audit_ok = (not audit_required) or get_gate_status(content, "Audit") == "PASS"
     run_dir = file_path.parent
     repo_root = run_dir.parent.parent.parent
     requirement_ids: list[str] = []
     requirements_path = run_dir / "00-requirements.md"
     if requirements_path.exists():
-        requirement_ids = parse_requirement_ids(requirements_path.read_text(encoding="utf-8"))
+        requirement_ids = get_run_requirement_ids(run_dir, workflow_profile)
     actual_changed_files: list[str] | None = None
-    if workflow_profile == STRICT_WORKFLOW_PROFILE:
+    if workflow_profile in STRICT_WORKFLOW_PROFILES:
         diff_basis = get_run_diff_basis(run_dir)
         raw_changed_files, _diff_basis_error = get_git_changed_files(repo_root, diff_basis)
         if raw_changed_files is not None:
@@ -2050,7 +2406,7 @@ def lint_audit_sections(
     run_dir: Path,
 ) -> list[str]:
     issues: list[str] = []
-    if workflow_profile != STRICT_WORKFLOW_PROFILE or file_path.name not in AUDITED_PHASE_FILES:
+    if workflow_profile not in STRICT_WORKFLOW_PROFILES or file_path.name not in AUDITED_PHASE_FILES:
         return issues
 
     audit_status = get_gate_status(content, "Audit")
@@ -2372,15 +2728,15 @@ def main() -> None:
         requirements_path = run_dir / "00-requirements.md"
         requirement_ids: list[str] = []
         if requirements_path.exists():
-            requirement_ids = parse_requirement_ids(requirements_path.read_text(encoding="utf-8"))
+            requirement_ids = get_run_requirement_ids(run_dir, workflow_profile)
             if not requirement_ids:
                 total_fail += 1
-                write_issue("FAIL", requirements_path, "Could not parse any requirement IDs (R1, R2, ...) from 00-requirements.md")
+                write_issue("FAIL", requirements_path, "Could not determine any requirement or source-inventory IDs for the run")
 
         diff_basis = get_run_diff_basis(run_dir)
         actual_changed_files: list[str] | None = None
         diff_basis_error: str | None = None
-        if workflow_profile == STRICT_WORKFLOW_PROFILE:
+        if workflow_profile in STRICT_WORKFLOW_PROFILES:
             raw_changed_files, diff_basis_error = get_git_changed_files(repo_root, diff_basis)
             if raw_changed_files is not None:
                 actual_changed_files = filter_runtime_changed_files(raw_changed_files, run_dir.name)
@@ -2431,7 +2787,7 @@ def main() -> None:
                     total_fail += 1
                     write_issue("FAIL", action_record, issue)
 
-        if workflow_profile in {STRICT_WORKFLOW_PROFILE, COMPAT_WORKFLOW_PROFILE}:
+        if workflow_profile in (STRICT_WORKFLOW_PROFILES | {COMPAT_WORKFLOW_PROFILE}):
             late_requirements = [
                 ("05-manual-qa.md", "06-decisions-update.md"),
                 ("06-decisions-update.md", "07-state-update.md"),

@@ -88,6 +88,8 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `scripts/lint-recursive-run.ps1`
 - `scripts/recursive-review-bundle.py`
 - `scripts/recursive-review-bundle.ps1`
+- `scripts/run-recursive-benchmark.py`
+- `scripts/run-recursive-benchmark.ps1`
 - `scripts/recursive-subagent-action.py`
 - `scripts/recursive-subagent-action.ps1`
 - `scripts/recursive-lock.py`
@@ -100,6 +102,7 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 ## Subskills
 
 - `skills/recursive-spec/SKILL.md`
+- `skills/recursive-benchmark/SKILL.md`
 - `skills/recursive-worktree/SKILL.md`
 - `skills/recursive-debugging/SKILL.md`
 - `skills/recursive-tdd/SKILL.md`
@@ -110,6 +113,7 @@ Use those subskills for their specialized discipline, but keep `/.recursive/RECU
 
 For audited phases, the installed workflow requires `draft -> audit -> repair -> re-audit -> pass -> lock`, with `Audit: PASS` required before Coverage/Approval may pass.
 Treat `## Worktree Diff Audit` as phase-scoped: Phase 2 owns planning completeness plus expected product/worktree paths, Phase 3-4 own actual product/worktree drift, Phase 6 owns `/.recursive/DECISIONS.md`, Phase 7 owns `/.recursive/STATE.md`, and Phase 8 owns `/.recursive/memory/**`.
+New runs should use `Workflow version: recursive-mode-audit-v2`, where Phase 1 must include `## Source Requirement Inventory` and Phase 2 must include `## Requirement Mapping`, `## Plan Drift Check`, and plan-stage `## Requirement Completion Status`.
 For Phase 3, declare `TDD Mode: strict|pragmatic`. Strict mode requires concrete RED and GREEN evidence paths. Pragmatic mode requires an explicit exception rationale plus compensating evidence.
 For Phase 5, declare `QA Execution Mode: human|agent-operated|hybrid`. Do not fake human sign-off for agent-operated QA, and do not omit sign-off for human or hybrid QA.
 For delegated review, prefer `scripts/recursive-review-bundle.py` or `scripts/recursive-review-bundle.ps1` so Phase 3.5 records a canonical `Review Bundle Path`.

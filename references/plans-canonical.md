@@ -8,10 +8,11 @@ This file remains a compatibility locator plus a compact mirror of the hard requ
 
 New runs should use:
 
-- `Workflow version: recursive-mode-audit-v1`
+- `Workflow version: recursive-mode-audit-v2`
 
 Compatibility aliases still recognized by tooling:
 
+- `recursive-mode-audit-v1`
 - `memory-phase8`
 - legacy runs with no late-phase marker
 
@@ -122,7 +123,7 @@ Phase-scoped diff ownership:
 - If a locked earlier phase omitted something material, the owning downstream phase must compensate via its artifact or addenda instead of rewriting locked history.
 - Effective inputs are base artifact plus relevant addenda; downstream audited phases must list, re-read, and reconcile them explicitly.
 - Diff audit excludes incidental runtime byproducts such as `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, and `.ruff_cache/` unless the repo intentionally tracks them.
-- Requirement completion is not proven by Traceability alone. Audited phases must include machine-checkable `Requirement Completion Status` entries for every in-scope `R#`.
+- Requirement completion is not proven by Traceability alone. Audited phases must include machine-checkable `Requirement Completion Status` entries for every in-scope requirement or Phase 1 source-inventory ID.
 - `implemented` and `verified` requirement dispositions must cite concrete `Changed Files`; `verified` also requires distinct verification evidence.
 - Prior recursive evidence must cite actual run or memory paths, or explicitly state that none is relevant with justification.
 
@@ -130,10 +131,11 @@ Phase-scoped diff ownership:
 
 Phase 2 must fail unless:
 
-- every in-scope `R#` is planned
+- every in-scope `R#` is planned in v1, and every Phase 1 source-inventory item is accounted for in v2
 - targeted files/modules are concrete enough for later comparison
 - tests and QA coverage are concrete
 - expected change surface is concrete enough for later diff reconciliation
+- v2 plans include `## Requirement Mapping`, `## Plan Drift Check`, and plan-stage `## Requirement Completion Status`
 
 Phase 3 must audit implementation claims against:
 

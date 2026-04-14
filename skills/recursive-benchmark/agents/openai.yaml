@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Benchmark"
+  short_description: "Paired recursive benchmark runs"
+  default_prompt: "Use $recursive-benchmark to compare recursive-mode off vs on for the packaged benchmark project."

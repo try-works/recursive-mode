@@ -195,14 +195,22 @@ Sharding rules:
 
 New runs should declare:
 
-- `Workflow version: recursive-mode-audit-v1`
+- `Workflow version: recursive-mode-audit-v2`
 
 Compatibility aliases:
 
+- `recursive-mode-audit-v1` for the earlier strict-audit profile
 - `memory-phase8` for the earlier phase8-aware workflow
 - legacy runs with no late-phase marker
 
-`recursive-mode-audit-v1` is the current stable profile. It strengthens audited phases with mandatory audit-loop behavior, explicit diff reconciliation, stricter traceability, and explicit self-audit fallback when subagents are unavailable.
+`recursive-mode-audit-v2` is the current stable profile. It keeps the audited-phase contract from v1 and adds a lossless Phase 1/Phase 2 handoff:
+
+- Phase 1 must include `## Source Requirement Inventory`
+- Phase 2 must include `## Requirement Mapping`
+- Phase 2 must include `## Plan Drift Check`
+- Phase 2 `## Requirement Completion Status` uses planning dispositions such as `planned`, `planned-via-merge`, and `planned-indirectly`
+
+`recursive-mode-audit-v1` remains supported for backward compatibility, but it does not require the stricter source-inventory and Phase 2 guardrail sections.
 
 ## Recursive phases
 
@@ -222,7 +230,7 @@ The following are audited phases:
 - Phase 7 — State update
 - Phase 8 — Memory impact
 
-For every audited phase in `recursive-mode-audit-v1`, the phase contract is:
+For every audited phase in `recursive-mode-audit-v1` and `recursive-mode-audit-v2`, the phase contract is:
 
 1. Draft or revise the phase artifact.
 2. Re-read the effective upstream artifacts.

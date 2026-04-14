@@ -33,6 +33,12 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/.recursive/memory/MEMORY.md`
   - `/skills/recursive-spec/SKILL.md`
   - relevant code and tests for the requested area
+- Benchmarking recursive-mode against a non-recursive baseline:
+  - `/skills/recursive-benchmark/SKILL.md`
+  - `/references/benchmarks/local-first-planner/README.md`
+  - `/references/benchmarks/local-first-planner/00-requirements.md`
+  - `/references/benchmarks/local-first-planner/scoring-rubric.md`
+  - `/scripts/run-recursive-benchmark.py`
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`

@@ -8,7 +8,7 @@ It gives an agent a file-backed workflow for requirements, planning, implementat
 
 - people who want a stricter, auditable agent workflow inside a repo
 - teams who want requirements and implementation evidence recorded in files
-- users who want installable subskills for requirements/spec authoring, worktrees, debugging, TDD, delegated review, and subagent support
+- users who want installable subskills for requirements/spec authoring, benchmarking, worktrees, debugging, TDD, delegated review, and subagent support
 
 ## What It Includes
 
@@ -16,6 +16,7 @@ This repo currently ships these installable skills:
 
 - `recursive-mode`
 - `recursive-spec`
+- `recursive-benchmark`
 - `recursive-worktree`
 - `recursive-debugging`
 - `recursive-tdd`
@@ -27,6 +28,7 @@ This repo currently ships these installable skills:
 | Skill | Purpose |
 | --- | --- |
 | `recursive-spec` | Co-authors repo-aware requirements for a new run from plan/spec prompts, keeps the draft outside the repo until approval, then creates the run and writes `00-requirements.md`. |
+| `recursive-benchmark` | Creates paired recursive-off and recursive-on benchmark repos, supports easy/medium/hard packaged scenarios, can run arms sequentially or in parallel with runner-specific fallback when needed, captures logs/timings/screenshots, and writes a comparison report. |
 | `recursive-worktree` | Sets up an isolated worktree before implementation starts. |
 | `recursive-debugging` | Adds structured root-cause analysis before fixing bugs or failing tests. |
 | `recursive-tdd` | Enforces RED-GREEN-REFACTOR discipline for implementation work. |
@@ -39,8 +41,11 @@ The workflow package includes functionality for:
 
 - turning a repo task into a staged, file-backed implementation run
 - co-authoring repo-aware requirements/specs before creating a new run
+- benchmarking recursive-mode against a non-recursive baseline in paired disposable repos
+- collecting screenshot artifacts taken during benchmark validation and embedding them in the report when present
 - capturing requirements, analysis, plans, implementation evidence, and validation in durable artifacts
 - enforcing audited phase progression with explicit pass/lock behavior
+- preserving arbitrary `00-requirements.md` content through Phase 1 `Source Requirement Inventory` and Phase 2 lossless requirement mapping
 - isolating work in a dedicated git worktree before implementation begins
 - running strict or pragmatic TDD with recorded RED/GREEN evidence
 - recording QA in explicit human, agent-operated, or hybrid modes
@@ -77,6 +82,7 @@ The main non-optional guardrails are:
 - audited phases must pass through `draft -> audit -> repair -> re-audit -> pass -> lock`
 - locked history is not rewritten; later corrections are handled through addenda and downstream reconciliation
 - in-scope requirements need explicit dispositions and supporting implementation or verification evidence
+- Phase 2 in the current workflow profile must preserve source obligations losslessly with `Source Requirement Inventory`, `Requirement Mapping`, and `Plan Drift Check`
 - delegated work is not trusted on its own; the main agent must verify it against real files, diffs, and artifacts
 - TDD, QA, review, and closeout all require explicit recorded modes, evidence, and phase outputs
 
@@ -176,6 +182,8 @@ After installing the skill package into your agent environment, the intended nor
 
 `recursive-spec` is intentionally approval-gated: it should collaborate on the draft first, keep that draft in temporary/session storage, and only create `/.recursive/run/<run-id>/00-requirements.md` after the user approves the spec.
 
+If you want to measure recursive-mode itself, use `recursive-benchmark` to create paired `recursive-off` and `recursive-on` benchmark repos from the packaged benchmark fixture and generate a markdown comparison report with logs, scores, and screenshot artifacts when present.
+
 Manual bootstrap commands remain the fallback path when the runtime cannot auto-run the installer:
 
 ```bash
@@ -205,6 +213,33 @@ If an agent is already inside the repo and needs a lightweight index of what to 
 The installable root skill entrypoint is:
 
 - `/SKILL.md`
+
+## Benchmarking recursive-mode
+
+The packaged benchmark flow is meant to answer a simple question: **does recursive-mode improve real coding-agent outcomes on the same project?**
+
+The packaged benchmark set uses React + TypeScript + Vite projects that:
+
+- works from a temp folder
+- runs entirely in the browser
+- requires no database or external server
+- is suitable for build/test/preview validation and later screenshot review
+
+The benchmark harness creates paired repos for `recursive-off` and `recursive-on`, bootstraps the recursive-mode scaffold into the recursive-on repo, records the selected runner and model, enforces a timeout budget, evaluates build/test/preview outcomes, supports GitHub Copilot CLI, Codex CLI, and Kimi CLI, runs a mandatory controller-side judge review for every completed arm with `gpt-5.4` when available and the benchmarked model as fallback, writes per-arm progress files so live status can be inferred from workspace changes, keeps repo-local `.benchmark-workspaces/` ignored, and writes a markdown scoreboard report that separates runner health from product outcome, reports whether the recursive-on arm actually completed the recursive run artifact set, surfaces the recursive-on worktree isolation decision from `00-worktree.md`, supports timestamp fallback evidence, applies optional hint penalties, embeds screenshots when available, and includes a combined benchmark score that blends heuristic rubric coverage (70%) with the judge metric (30%).
+
+Packaged scenario tiers:
+
+- `local-first-planner` - easy
+- `team-capacity-board` - medium
+- `release-readiness-dashboard` - hard
+
+Maintainer entrypoints:
+
+```bash
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all
+```
 
 ## How To Start A Run
 

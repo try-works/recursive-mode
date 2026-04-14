@@ -16,3 +16,9 @@ __pycache__/
 # Conservative local coverage output
 .coverage
 htmlcov/
+
+# Local benchmark workspaces
+.benchmark-workspaces/
+
+# Local recursive worktrees
+.worktrees/

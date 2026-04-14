@@ -22,6 +22,7 @@ Installable entrypoints:
 
 - `/SKILL.md`
 - `/skills/recursive-spec/SKILL.md`
+- `/skills/recursive-benchmark/SKILL.md`
 - `/skills/recursive-worktree/SKILL.md`
 - `/skills/recursive-debugging/SKILL.md`
 - `/skills/recursive-tdd/SKILL.md`
@@ -121,6 +122,14 @@ python "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.py" --repo-root .
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.ps1" -RepoRoot .
 ```
 
+Run the paired benchmark harness:
+
+```bash
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all -Scenario local-first-planner
+```
+
 ## Maintainer Smoke Harness
 
 Run disposable regression coverage when changing this repo itself:
@@ -140,6 +149,7 @@ Notes:
 - `--toolchain python` must work without PowerShell
 - `mixed` should skip PowerShell clearly when unavailable
 - full mode exercises negative regressions as well as the positive path
+- benchmark harness output should stay in temp or disposable workspaces, not committed repo paths
 
 ## Delegation And Review
 

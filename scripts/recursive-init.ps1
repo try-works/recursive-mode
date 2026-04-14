@@ -122,7 +122,7 @@ function New-RequirementsContent {
 Run: `/.recursive/run/{0}/`
 Phase: `00 Requirements`
 Status: `DRAFT`
-Workflow version: `recursive-mode-audit-v1`
+Workflow version: `recursive-mode-audit-v2`
 Inputs:
 {1}
 Outputs:

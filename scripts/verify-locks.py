@@ -20,8 +20,10 @@ LOCK_HASH_RE = re.compile(r'(?m)^[ \t]*LockHash:\s*(?:`|")?([a-fA-F0-9]{64})(?:`
 LOCKED_AT_RE = re.compile(r'(?m)^[ \t]*LockedAt:\s*(?:`|")?([^`"\r\n]+)(?:`|")?\s*$')
 LOCK_HASH_LINE_RE = re.compile(r'(?m)^[ \t]*LockHash:.*(?:\n|$)')
 WORKFLOW_VERSION_RE = re.compile(r'(?m)^[ \t]*Workflow version:\s*(?:`|")?([^`"\r\n]+)(?:`|")?\s*$')
+CURRENT_WORKFLOW_PROFILE = "recursive-mode-audit-v2"
 STRICT_WORKFLOW_PROFILE = "recursive-mode-audit-v1"
 COMPAT_WORKFLOW_PROFILE = "memory-phase8"
+STRICT_WORKFLOW_PROFILES = {CURRENT_WORKFLOW_PROFILE, STRICT_WORKFLOW_PROFILE}
 AUDITED_PHASE_FILES = {
     "01-as-is.md",
     "01.5-root-cause.md",
@@ -69,6 +71,8 @@ def get_workflow_profile(run_dir: Path) -> str:
         match = WORKFLOW_VERSION_RE.search(content)
         if match:
             workflow_version = match.group(1).strip()
+            if workflow_version == CURRENT_WORKFLOW_PROFILE:
+                return CURRENT_WORKFLOW_PROFILE
             if workflow_version == STRICT_WORKFLOW_PROFILE:
                 return STRICT_WORKFLOW_PROFILE
             if workflow_version == COMPAT_WORKFLOW_PROFILE:
@@ -248,7 +252,7 @@ def main() -> int:
             updated_content = artifact_path.read_text(encoding="utf-8")
             coverage_ok, coverage_reason = test_gate(updated_content, "Coverage")
             approval_ok, approval_reason = test_gate(updated_content, "Approval")
-            audit_required = workflow_profile == STRICT_WORKFLOW_PROFILE and artifact["file"] in AUDITED_PHASE_FILES
+            audit_required = workflow_profile in STRICT_WORKFLOW_PROFILES and artifact["file"] in AUDITED_PHASE_FILES
             audit_ok = True
             audit_reason = None
             if audit_required:

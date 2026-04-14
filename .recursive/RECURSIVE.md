@@ -195,14 +195,22 @@ Sharding rules:
 
 New runs should declare:
 
-- `Workflow version: recursive-mode-audit-v1`
+- `Workflow version: recursive-mode-audit-v2`
 
 Compatibility aliases:
 
+- `recursive-mode-audit-v1` for the earlier strict-audit profile
 - `memory-phase8` for the earlier phase8-aware workflow
 - legacy runs with no late-phase marker
 
-`recursive-mode-audit-v1` is the current stable profile. It strengthens audited phases with mandatory audit-loop behavior, explicit diff reconciliation, stricter traceability, and explicit self-audit fallback when subagents are unavailable.
+`recursive-mode-audit-v2` is the current stable profile. It keeps the audited-phase contract from v1 and adds a lossless Phase 1/Phase 2 handoff:
+
+- Phase 1 must include `## Source Requirement Inventory`
+- Phase 2 must include `## Requirement Mapping`
+- Phase 2 must include `## Plan Drift Check`
+- Phase 2 `## Requirement Completion Status` uses planning dispositions such as `planned`, `planned-via-merge`, and `planned-indirectly`
+
+`recursive-mode-audit-v1` remains supported for backward compatibility, but it does not require the stricter source-inventory and Phase 2 guardrail sections.
 
 ## Recursive phases
 
@@ -222,7 +230,7 @@ The following are audited phases:
 - Phase 7 — State update
 - Phase 8 — Memory impact
 
-For every audited phase in `recursive-mode-audit-v1`, the phase contract is:
+For every audited phase in `recursive-mode-audit-v1` and `recursive-mode-audit-v2`, the phase contract is:
 
 1. Draft or revise the phase artifact.
 2. Re-read the effective upstream artifacts.
@@ -403,6 +411,7 @@ Phase 1 — AS-IS analysis
 - Output: `01-as-is.md`
 - Audit must reread earlier relevant run docs when they matter to the same subsystem, workflow, or architecture area
 - Audit must record which upstream artifacts and prior recursive evidence were reread
+- In `recursive-mode-audit-v2`, Phase 1 must include `## Source Requirement Inventory` so each source obligation is indexed with a source quote, normalized summary, and disposition before Phase 2 planning begins
 - **TODO Requirement:** Phase artifact MUST include `## TODO` section with checkable items
 - **TODO Enforcement:** ALL TODO items must be checked off before locking
 
@@ -421,10 +430,13 @@ Phase 2 — TO-BE plan (ExecPlan-grade)
 - If Phase 1.5 exists: also input `01.5-root-cause.md` (plus addenda)
 - Output: `02-to-be-plan.md`
 - Audit must fail unless:
-  - every in-scope `R#` is planned
+  - every in-scope `R#` is planned in `recursive-mode-audit-v1`
+  - every Phase 1 source-inventory item is accounted for in `recursive-mode-audit-v2`
   - targeted files/modules are concrete
   - tests and QA coverage are concrete
   - expected change surface is concrete enough for later diff reconciliation
+- In `recursive-mode-audit-v2`, Phase 2 must include `## Requirement Mapping`, `## Plan Drift Check`, and plan-stage `## Requirement Completion Status`
+- In `recursive-mode-audit-v2`, vague umbrella restatements are invalid unless `## Requirement Mapping` explicitly records the covered source-inventory items and any merge rationale
 - Phase 2 owns planning completeness plus the expected product/worktree change surface only; later `/.recursive/DECISIONS.md`, `/.recursive/STATE.md`, and `/.recursive/memory/**` churn must not retroactively invalidate a locked Phase 2 artifact
 - **TODO Requirement:** Phase artifact MUST include `## TODO` section with checkable items
 - **TODO Enforcement:** ALL TODO items must be checked off before locking
@@ -529,7 +541,7 @@ Example prompt pattern:
 
 Every per-run recursive-mode artifact (`00-requirements.md` through `08-memory-impact.md`, plus any addendum files) must begin with a short header and must end with Coverage and Approval gates.
 
-For audited phases in `recursive-mode-audit-v1`, the artifact must also contain explicit audit sections before Coverage and Approval, including:
+For audited phases in `recursive-mode-audit-v1` and `recursive-mode-audit-v2`, the artifact must also contain explicit audit sections before Coverage and Approval, including:
 
 - `## Audit Context`
 - `## Effective Inputs Re-read`
@@ -548,6 +560,12 @@ The following phases must also include `## Prior Recursive Evidence Reviewed`:
 - Phase 4
 - Phase 7
 - Phase 8
+
+Additional v2-only required sections:
+
+- Phase 1 must include `## Source Requirement Inventory`
+- Phase 2 must include `## Requirement Mapping`
+- Phase 2 must include `## Plan Drift Check`
 
 ### Required header fields (top of file)
 
@@ -604,7 +622,7 @@ Inside `## Worktree Diff Audit`, record at minimum:
 
 `recursive-init` should prefill these fields from the current `HEAD` commit when possible, but Phase 0 remains responsible for correcting them if the real worktree context differs. Tooling must fail in Phase 0, not guess later, when the baseline type, references, or normalized command are missing, ambiguous, or inconsistent.
 
-Inside `## Requirement Completion Status`, list every in-scope `R#` using machine-checkable bullets such as:
+Inside `## Requirement Completion Status`, list every in-scope requirement or source-inventory ID using machine-checkable bullets such as:
 
 - `R1 | Status: implemented | Changed Files: /path/to/file | Implementation Evidence: /path/to/file, /path/to/artifact`
 - `R2 | Status: verified | Changed Files: /path/to/file | Implementation Evidence: /path/to/file | Verification Evidence: /path/to/test-summary.md`
@@ -612,6 +630,12 @@ Inside `## Requirement Completion Status`, list every in-scope `R#` using machin
 - `R4 | Status: out-of-scope | Rationale: [why] | Scope Decision: /.recursive/run/<run-id>/addenda/...`
 - `R5 | Status: blocked | Rationale: [why] | Blocking Evidence: /path/to/log, /path/to/artifact`
 - `R6 | Status: superseded by approved addendum | Addendum: /.recursive/run/<run-id>/addenda/...`
+
+In `recursive-mode-audit-v2` Phase 2, use planning dispositions instead of implementation dispositions:
+
+- `R1 | Status: planned | Implementation Surface: /path/to/file | Verification Surface: /path/to/test-or-artifact | QA Surface: /path/to/manual-qa-or-scenario`
+- `SRC-001 | Status: planned-via-merge | Implementation Surface: /path/to/file | Verification Surface: /path/to/test-or-artifact | QA Surface: not-applicable-with-rationale | Rationale: [why the merge is lossless]`
+- `SRC-002 | Status: planned-indirectly | Implementation Surface: /path/to/file | Verification Surface: /path/to/test-or-artifact | QA Surface: not-applicable-with-rationale | Rationale: [why the obligation is satisfied indirectly]`
 
 Mentioning an `R#` only in Traceability is never sufficient for completion proof.
 

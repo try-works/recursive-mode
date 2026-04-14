@@ -92,7 +92,7 @@ def requirements_content(run_id: str, template: str, from_issue: str) -> str:
     return f"""Run: `/.recursive/run/{run_id}/`
 Phase: `00 Requirements`
 Status: `DRAFT`
-Workflow version: `recursive-mode-audit-v1`
+Workflow version: `recursive-mode-audit-v2`
 Inputs:
 {inputs_block}
 Outputs:

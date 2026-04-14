@@ -414,6 +414,9 @@ class SmokeHarness:
         for snippet in expected_snippets:
             if snippet not in scaffold:
                 raise SmokeError(f"recursive-init did not prefill the expected Phase 0 diff-basis snippet: {snippet}")
+        requirements_scaffold = (self.run_dir / "00-requirements.md").read_text(encoding="utf-8")
+        if "Workflow version: `recursive-mode-audit-v2`" not in requirements_scaffold:
+            raise SmokeError("recursive-init did not default new runs to recursive-mode-audit-v2.")
         self.summary.append("Run scaffold success: recursive-init produced a reusable Phase 0 diff basis.")
 
     @property
@@ -905,7 +908,7 @@ class SmokeHarness:
                         outputs=[f"{run_prefix}/00-requirements.md"],
                         scope_note="Defines the stable requirement IDs for the disposable Tiny Tasks smoke run.",
                     ),
-                    "Workflow version: `recursive-mode-audit-v1`",
+                    "Workflow version: `recursive-mode-audit-v2`",
                     self.todo_section(
                         [
                             "Define requirement identifiers and acceptance criteria",
@@ -1049,6 +1052,10 @@ class SmokeHarness:
 
                         - `R1`: Before implementation, `summarize_tasks()` only returned the total count, so completed and active counts were missing.
 
+                        ## Source Requirement Inventory
+
+                        - `R1 | Source Quote: Tiny Tasks must report total, completed, and active task counts for a list of task dictionaries. | Summary: The task summary must expose total, completed, and active counts. | Disposition: in-scope`
+
                         ## Relevant Code Pointers
 
                         - `tiny_tasks.py`
@@ -1100,6 +1107,10 @@ class SmokeHarness:
                         - `tiny_tasks.py`: add completed and active count reporting.
                         - `test_tiny_tasks.py`: add a failing test that asserts the detailed summary output.
 
+                        ## Requirement Mapping
+
+                        - `R1 | Coverage: direct | Source Quote: Tiny Tasks must report total, completed, and active task counts for a list of task dictionaries. | Implementation Surface: tiny_tasks.py, test_tiny_tasks.py | Verification Surface: test_tiny_tasks.py, /.recursive/run/<run-id>/04-test-summary.md | QA Surface: /.recursive/run/<run-id>/05-manual-qa.md`
+
                         ## Implementation Steps
 
                         - Write a failing unittest for the new summary string.
@@ -1127,6 +1138,11 @@ class SmokeHarness:
                         - `SP1`: failing test
                         - `SP2`: implementation update
                         - `SP3`: review, test, and closeout
+
+                        ## Plan Drift Check
+
+                        - No source obligations were merged, deferred, or narrowed in the Phase 2 plan.
+                        - The source quote for `R1` is preserved directly in `## Requirement Mapping`.
                         """
                     ),
                     self.audit_sections(
@@ -1134,6 +1150,13 @@ class SmokeHarness:
                         prior=audited_common["prior"],
                         reviewed_paths=product_paths,
                         reconciliation=["The plan is still consistent with the recorded as-is behavior and the narrow fixture scope."],
+                        requirement_statuses=[
+                            (
+                                "R1 | Status: planned | Implementation Surface: `tiny_tasks.py`, `test_tiny_tasks.py` "
+                                f"| Verification Surface: `test_tiny_tasks.py`, `{run_prefix}/04-test-summary.md` "
+                                f"| QA Surface: `{run_prefix}/05-manual-qa.md`"
+                            )
+                        ],
                     ),
                     self.traceability_section(["- R1 -> both planned file edits and the validation path are explicit."]),
                     self.gate_section("Coverage Gate", "Coverage", "The planned file changes and test strategy cover the full requirement."),
@@ -1786,6 +1809,8 @@ class SmokeHarness:
             verify_result = self.run_verify(toolchain)
             if "Current Phase: COMPLETE" not in status_result.stdout:
                 raise SmokeError(self.format_failure(f"{toolchain} status did not report completion", status_result))
+            if "Workflow Profile: recursive-mode-audit-v2" not in status_result.stdout:
+                raise SmokeError(self.format_failure(f"{toolchain} status did not report the v2 workflow profile", status_result))
             if require_subagent_review:
                 review_content = (self.run_dir / "03.5-code-review.md").read_text(encoding="utf-8")
                 if "Audit Execution Mode: subagent" not in review_content:
@@ -2052,6 +2077,58 @@ class SmokeHarness:
         finally:
             write_text(target, original)
 
+    def negative_source_inventory_case(self) -> None:
+        target = self.run_dir / "01-as-is.md"
+        original = target.read_text(encoding="utf-8")
+        broken = strip_lock_metadata(original)
+        broken = replace_section(broken, "Source Requirement Inventory", "- none")
+        write_text(target, broken)
+        try:
+            for toolchain in self.validation_toolchains():
+                lint_result = self.run_lint(toolchain, expect_success=False)
+                combined = (lint_result.stdout + lint_result.stderr).lower()
+                if "source requirement inventory" not in combined:
+                    raise SmokeError(self.format_failure(f"{toolchain} lint missed source-inventory failure", lint_result))
+                status_result = self.run_status(toolchain)
+                status_text = (status_result.stdout + status_result.stderr).lower()
+                if "source requirement inventory" not in status_text:
+                    raise SmokeError(self.format_failure(f"{toolchain} status missed source-inventory blocker", status_result))
+                try:
+                    self.lock_artifact(toolchain, "01-as-is.md")
+                except SmokeError:
+                    pass
+                else:
+                    raise SmokeError(f"{toolchain} recursive-lock unexpectedly succeeded without a valid source requirement inventory.")
+            self.summary.append("Negative source-inventory case passed.")
+        finally:
+            write_text(target, original)
+
+    def negative_phase2_mapping_case(self) -> None:
+        target = self.run_dir / "02-to-be-plan.md"
+        original = target.read_text(encoding="utf-8")
+        broken = strip_lock_metadata(original)
+        broken = replace_section(broken, "Requirement Mapping", "- none")
+        write_text(target, broken)
+        try:
+            for toolchain in self.validation_toolchains():
+                lint_result = self.run_lint(toolchain, expect_success=False)
+                combined = (lint_result.stdout + lint_result.stderr).lower()
+                if "requirement mapping" not in combined:
+                    raise SmokeError(self.format_failure(f"{toolchain} lint missed phase-2 mapping failure", lint_result))
+                status_result = self.run_status(toolchain)
+                status_text = (status_result.stdout + status_result.stderr).lower()
+                if "requirement mapping" not in status_text:
+                    raise SmokeError(self.format_failure(f"{toolchain} status missed phase-2 mapping blocker", status_result))
+                try:
+                    self.lock_artifact(toolchain, "02-to-be-plan.md")
+                except SmokeError:
+                    pass
+                else:
+                    raise SmokeError(f"{toolchain} recursive-lock unexpectedly succeeded without a valid Phase 2 requirement mapping.")
+            self.summary.append("Negative Phase 2 mapping case passed.")
+        finally:
+            write_text(target, original)
+
     def negative_review_bundle_case(self) -> None:
         target = self.run_dir / "03.5-code-review.md"
         original = target.read_text(encoding="utf-8")
@@ -2310,6 +2387,8 @@ class SmokeHarness:
     def run_full_regression_suite(self) -> None:
         self.negative_phase0_diff_basis_case()
         self.negative_strict_tdd_case()
+        self.negative_source_inventory_case()
+        self.negative_phase2_mapping_case()
         self.negative_requirement_proof_case()
         self.negative_review_bundle_case()
         self.negative_context_free_review_case()

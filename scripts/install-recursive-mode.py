@@ -361,6 +361,12 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/.recursive/memory/MEMORY.md`
   - `/skills/recursive-spec/SKILL.md`
   - relevant code and tests for the requested area
+- Benchmarking recursive-mode against a non-recursive baseline:
+  - `/skills/recursive-benchmark/SKILL.md`
+  - `/references/benchmarks/local-first-planner/README.md`
+  - `/references/benchmarks/local-first-planner/00-requirements.md`
+  - `/references/benchmarks/local-first-planner/scoring-rubric.md`
+  - `/scripts/run-recursive-benchmark.py`
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`
@@ -420,6 +426,11 @@ Spec-authoring rule:
 
 - If the user asks to create a plan, help plan, create a spec, or write requirements for a new recursive run, prefer `recursive-spec` before orchestration.
 - `recursive-spec` should confirm the user wants spec help, ask what they want to do, read `STATE.md`, `DECISIONS.md`, `MEMORY.md`, and relevant code/tests, keep the draft in temporary non-repo storage, then create the new run only after the requirements are approved.
+
+Benchmark rule:
+
+- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, prefer `recursive-benchmark`.
+- `recursive-benchmark` should use the packaged benchmark fixture, create paired disposable repos, keep the benchmark requirements aligned across both arms, capture logs and timings, and write a final comparison report.
 
 Audit delegation rule:
 
