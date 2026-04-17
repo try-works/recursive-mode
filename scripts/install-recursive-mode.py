@@ -75,6 +75,28 @@ def upsert_marked_block(file_path: Path, start_marker: str, end_marker: str, blo
         print(f"[OK] File already up to date: {file_path}")
 
 
+def normalize_plain_or_wrapped_content(content: str, start_marker: str, end_marker: str) -> str:
+    start_index = content.find(start_marker)
+    end_index = content.rfind(end_marker)
+    if start_index == -1 or end_index == -1 or end_index < start_index:
+        return content.rstrip("\r\n")
+    prefix = content[:start_index].rstrip("\r\n")
+    if prefix.strip():
+        return prefix
+    body_start = start_index + len(start_marker)
+    return content[body_start:end_index].strip("\r\n")
+
+
+def sync_plain_file(file_path: Path, content: str) -> None:
+    normalized = content.rstrip("\r\n") + "\n"
+    existing = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
+    if existing != normalized:
+        write_utf8_no_bom(file_path, normalized)
+        print(f"[OK] Updated file: {file_path}")
+    else:
+        print(f"[OK] File already up to date: {file_path}")
+
+
 def memory_router_body() -> str:
     return """## Memory Router
 
@@ -362,11 +384,10 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/skills/recursive-spec/SKILL.md`
   - relevant code and tests for the requested area
 - Benchmarking recursive-mode against a non-recursive baseline:
-  - `/skills/recursive-benchmark/SKILL.md`
-  - `/references/benchmarks/local-first-planner/README.md`
-  - `/references/benchmarks/local-first-planner/00-requirements.md`
-  - `/references/benchmarks/local-first-planner/scoring-rubric.md`
-  - `/scripts/run-recursive-benchmark.py`
+  - Install the separate optional `recursive-benchmark` add-on only when the user explicitly asks for benchmarking.
+  - Prefer `find-skills` when available; otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
+  - The default exported `recursive-mode` package intentionally excludes benchmark fixtures and benchmark skill files.
+  - After the benchmark add-on is installed, follow its packaged fixture and harness docs.
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`
@@ -429,8 +450,8 @@ Spec-authoring rule:
 
 Benchmark rule:
 
-- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, prefer `recursive-benchmark`.
-- `recursive-benchmark` should use the packaged benchmark fixture, create paired disposable repos, keep the benchmark requirements aligned across both arms, capture logs and timings, and write a final comparison report.
+- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, install and use the separate optional `recursive-benchmark` add-on on demand instead of assuming benchmark fixtures ship with the default recursive-mode package.
+- Prefer `find-skills` when available. Otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
 
 Audit delegation rule:
 
@@ -539,11 +560,12 @@ def main() -> None:
     upsert_marked_block(plans_path, plans_start_marker, plans_end_marker, plans_bridge_body().rstrip("\r\n"))
 
     if not args.skip_recursive_update:
-        if canonical_workflow_path.resolve() == recursive_path.resolve():
-            print("[INFO] Skipped RECURSIVE.md self-upsert because source and destination are the same file.")
-        else:
-            canonical_body = canonical_workflow_path.read_text(encoding="utf-8").rstrip("\r\n")
-            upsert_marked_block(recursive_path, recursive_start_marker, recursive_end_marker, canonical_body)
+        canonical_body = normalize_plain_or_wrapped_content(
+            canonical_workflow_path.read_text(encoding="utf-8"),
+            recursive_start_marker,
+            recursive_end_marker,
+        )
+        sync_plain_file(recursive_path, canonical_body)
     else:
         print("[INFO] Skipped RECURSIVE.md update by configuration.")
 

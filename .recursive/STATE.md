@@ -3,7 +3,7 @@
 ## Current State
 
 - The repository now uses `/.recursive/RECURSIVE.md` as the single canonical workflow specification.
-- The workflow profile in active use is `recursive-mode-audit-v1`.
+- The workflow profile in active use is `recursive-mode-audit-v2`.
 - Executable diff-basis normalization is implemented across lint, status, review-bundle generation, and lock-time validation.
 - Audited phases now require status-specific, machine-checkable `Requirement Completion Status` entries rather than traceability-only completion claims.
 - Delegated review is grounded by canonical review bundles, prior recursive evidence, and durable subagent action records under `/.recursive/run/<run-id>/subagents/`, with explicit main-agent verification recorded in the phase artifact.

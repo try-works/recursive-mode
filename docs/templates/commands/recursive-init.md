@@ -27,7 +27,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-init.ps1" -RepoRoot . -RunI
 4. Validates that the recorded Phase 0 diff basis is executable against live git state before returning success
 5. Creates `addenda/`, `subagents/`, and `evidence/` subfolders
 6. Creates canonical evidence subfolders including `review-bundles/`
-7. Marks the run as `recursive-mode-audit-v1`
+7. Marks the run as `recursive-mode-audit-v2`
 
 ## Output
 

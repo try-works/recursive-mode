@@ -22,12 +22,15 @@ Installable entrypoints:
 
 - `/SKILL.md`
 - `/skills/recursive-spec/SKILL.md`
-- `/skills/recursive-benchmark/SKILL.md`
 - `/skills/recursive-worktree/SKILL.md`
 - `/skills/recursive-debugging/SKILL.md`
 - `/skills/recursive-tdd/SKILL.md`
 - `/skills/recursive-review-bundle/SKILL.md`
 - `/skills/recursive-subagent/SKILL.md`
+
+Optional add-on source:
+
+- `/skills/recursive-benchmark/SKILL.md`
 
 ## Bootstrap Layout
 
@@ -123,6 +126,8 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.ps1" -Rep
 ```
 
 Run the paired benchmark harness:
+
+The benchmark add-on is intentionally not part of the default exported recursive-mode package surface; use it only when benchmarking is explicitly requested.
 
 ```bash
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner

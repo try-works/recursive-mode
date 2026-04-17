@@ -96,7 +96,18 @@ MEMORY_REQUIRED_FIELDS = [
 ]
 TDD_MODES = {"strict", "pragmatic"}
 QA_EXECUTION_MODES = {"human", "agent-operated", "hybrid"}
-TRANSIENT_RUNTIME_DIR_MARKERS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"}
+TRANSIENT_RUNTIME_DIR_MARKERS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".hypothesis",
+    ".tox",
+    ".nox",
+    ".target",
+    ".playwright-mcp",
+    ".cargo-target-dir",
+}
 TRANSIENT_RUNTIME_FILE_NAMES = {".ds_store", "thumbs.db"}
 TRANSIENT_RUNTIME_SUFFIXES = (".pyc", ".pyo", ".pyd")
 DIFF_BASIS_ALLOWED_TYPES = {"local commit", "local branch", "remote ref", "merge-base derived"}

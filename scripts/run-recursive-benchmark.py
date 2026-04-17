@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import json
 import os
 import re
@@ -14,11 +15,13 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import uuid
 import urllib.error
 import urllib.request
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,16 +34,70 @@ SCENARIOS = {
     "local-first-planner": {
         "title": "Local First Planner",
         "tier": "easy",
+        "runtime": "node-vite",
     },
     "team-capacity-board": {
         "title": "Team Capacity Board",
         "tier": "medium",
+        "runtime": "node-vite",
     },
     "release-readiness-dashboard": {
         "title": "Release Readiness Dashboard",
         "tier": "hard",
+        "runtime": "node-vite",
+    },
+    "scientific-calculator-rust": {
+        "title": "Scientific Calculator (Rust/WASM)",
+        "tier": "xhard",
+        "runtime": "rust-wasm",
     },
 }
+
+NODE_SOURCE_EXTENSIONS = {".ts", ".tsx", ".css", ".json"}
+RUST_WASM_SOURCE_EXTENSIONS = {".rs", ".css", ".html", ".toml", ".json", ".js"}
+IGNORED_SOURCE_DIRS = {
+    ".git",
+    ".recursive",
+    ".worktrees",
+    "benchmark",
+    "dist",
+    "node_modules",
+    "target",
+}
+BENCHMARK_TOOLCHAIN_DIRNAME = ".benchmark-toolchain"
+TRANSIENT_RUNTIME_DIR_MARKERS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".hypothesis",
+    ".tox",
+    ".nox",
+    ".target",
+    ".cargo-target-dir",
+    ".playwright-mcp",
+}
+ALLOWED_CONTROL_PLANE_PREFIXES = (
+    ".recursive/",
+    ".worktrees/",
+    "benchmark/",
+    ".agent/",
+    ".codex/",
+)
+EXPLICIT_PRODUCT_FILE_NAMES = {
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+}
+RECURSIVE_EVALUATION_ISSUE_PREFIXES = (
+    "Recursive run lint timed out before benchmark closeout could be confirmed.",
+    "Recursive run artifacts failed controller-side lint.",
+    "Recursive workflow artifacts missing: ",
+    "Recursive Phase 1/2 guardrails missing or outdated: ",
+    "Recursive worktree doc does not record a parsable worktree location.",
+    "Recursive worktree doc points to a worktree path that does not exist.",
+)
 
 REQUIRED_RECURSIVE_RUN_FILES = (
     "00-requirements.md",
@@ -61,6 +118,9 @@ DEFAULT_JUDGE_TIMEOUT_SECONDS = 15 * 60
 DEFAULT_HEURISTIC_WEIGHT = 0.7
 DEFAULT_JUDGE_WEIGHT = 0.3
 DEFAULT_BENCHMARK_SCORE_MAX = 100.0
+DEFAULT_RUST_TOOL_TIMEOUT_SECONDS = 90 * 60
+TRUNK_VERSION = "0.21.14"
+LOCK_HASH_LINE_RE = re.compile(r"(?m)^[ \t]*LockHash:.*(?:\n|$)")
 
 
 class BenchmarkError(RuntimeError):
@@ -87,6 +147,13 @@ class RunnerConfig:
     supports_json: bool
 
 
+@dataclass(frozen=True)
+class BenchmarkRequirementSpec:
+    requirement_id: str
+    title: str
+    source_quote: str
+
+
 @dataclass
 class ArmResult:
     runner_slug: str
@@ -96,6 +163,7 @@ class ArmResult:
     arm_name: str
     repo_root: str = ""
     product_root: str = ""
+    expected_product_root: str = ""
     status: str = "not-started"
     agent_status: str = "not-run"
     product_status: str = "not-evaluated"
@@ -115,6 +183,11 @@ class ArmResult:
     recursive_phase2_guardrails: str = "n/a"
     recursive_run_root: str = ""
     recursive_artifact_status: dict[str, bool] = field(default_factory=dict)
+    recursive_delivery_status: str = "n/a"
+    recursive_claimed_files: list[str] = field(default_factory=list)
+    recursive_product_change_paths: list[str] = field(default_factory=list)
+    recursive_root_product_drift: list[str] = field(default_factory=list)
+    recursive_missing_claimed_files: list[str] = field(default_factory=list)
     hint_count: int = 0
     hint_penalty: float = 0.0
     timestamp_fallback_used: bool = False
@@ -129,10 +202,15 @@ class ArmResult:
     judge_model_name: str = ""
     judge_summary: str = ""
     judge_notes: list[str] = field(default_factory=list)
+    judge_entry_adjustments: dict[str, float] = field(default_factory=dict)
+    judge_entry_adjustment_reasons: dict[str, str] = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)
     log_paths: dict[str, str] = field(default_factory=dict)
     screenshot_paths: list[str] = field(default_factory=list)
     score_breakdown: dict[str, float] = field(default_factory=dict)
+    score_breakdown_max: dict[str, float] = field(default_factory=dict)
+    judge_adjusted_score_breakdown: dict[str, float] = field(default_factory=dict)
+    judge_adjusted_score: float | None = None
     phase_durations: dict[str, float] = field(default_factory=dict)
     token_usage: dict[str, int] = field(default_factory=dict)
     timestamp_evidence: dict[str, str] = field(default_factory=dict)
@@ -153,6 +231,31 @@ def format_score(value: float) -> str:
 def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8", newline="\n")
+
+
+def _retry_remove_readonly(function, path: str, excinfo) -> None:
+    os.chmod(path, 0o700)
+    function(path)
+
+
+def remove_tree(path: Path) -> None:
+    if not path.exists():
+        return
+    shutil.rmtree(path, onexc=_retry_remove_readonly)
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def normalize_for_lock_hash(content: str) -> str:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    return LOCK_HASH_LINE_RE.sub("", normalized)
+
+
+def lock_hash_from_content(content: str) -> str:
+    normalized = normalize_for_lock_hash(content)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def append_text(path: Path, content: str) -> None:
@@ -178,6 +281,39 @@ def load_json_lines(text: str) -> list[dict]:
 
 def command_string(command: list[str]) -> str:
     return subprocess.list2cmdline(command)
+
+
+def normalize_benchmark_path(value: str) -> str:
+    normalized = value.strip().replace("\\", "/")
+    normalized = re.sub(r"^[.]/+", "", normalized)
+    return normalized.strip("/")
+
+
+def dedupe_preserve_order(values: list[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def parse_git_status_paths(status_output: str) -> list[str]:
+    paths: list[str] = []
+    for raw_line in status_output.splitlines():
+        if not raw_line.strip():
+            continue
+        line = raw_line.rstrip()
+        payload = line[3:] if len(line) > 3 else line
+        if " -> " in payload:
+            payload = payload.rsplit(" -> ", 1)[1]
+        payload = payload.strip().strip('"')
+        normalized = normalize_benchmark_path(payload)
+        if normalized:
+            paths.append(normalized)
+    return dedupe_preserve_order(paths)
 
 
 def detect_port() -> int:
@@ -212,6 +348,9 @@ class BenchmarkHarness:
         self.summary_notes: list[str] = []
         self.effective_arm_modes: dict[str, str] = {}
         self.npm_exe = shutil.which(args.npm_command)
+        self.cargo_exe = shutil.which("cargo")
+        self.rustup_exe = shutil.which("rustup")
+        self.trunk_exe = shutil.which("trunk")
         self.runner_configs = self._build_runner_configs()
         self.kimi_config_path = Path.home() / ".kimi" / "config.toml"
         self.ensure_workspace_ignored()
@@ -221,25 +360,303 @@ class BenchmarkHarness:
             root = Path(self.args.workspace_root).resolve()
             root.mkdir(parents=True, exist_ok=True)
             return root
-        return Path(tempfile.mkdtemp(prefix="recursive-benchmark-"))
+        default_root = self.repo_source_root / ".benchmark-workspaces"
+        default_root.mkdir(parents=True, exist_ok=True)
+        workspace = default_root / f"{self.scenario_name}-{uuid.uuid4().hex[:8]}"
+        workspace.mkdir(parents=True, exist_ok=True)
+        return workspace
 
     def ensure_workspace_ignored(self) -> None:
         gitignore_path = self.repo_source_root / ".gitignore"
         benchmark_ignore = ".benchmark-workspaces/"
+        toolchain_ignore = f"{BENCHMARK_TOOLCHAIN_DIRNAME}/"
+        existing = gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else ""
+        existing_lines = {line.strip() for line in existing.splitlines()}
+        additions: list[str] = []
         try:
             self.workspace_root.resolve().relative_to(self.repo_source_root.resolve())
+            if self.workspace_root.name == ".benchmark-workspaces" or benchmark_ignore in self.workspace_root.as_posix():
+                if benchmark_ignore not in existing_lines:
+                    additions.extend(["# Local benchmark workspaces", benchmark_ignore])
         except ValueError:
+            pass
+        if toolchain_ignore not in existing_lines:
+            additions.extend(["# Local benchmark toolchain cache", toolchain_ignore])
+        if not additions:
             return
-        if self.workspace_root.name != ".benchmark-workspaces" and benchmark_ignore not in self.workspace_root.as_posix():
-            return
-        existing = gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else ""
-        if benchmark_ignore in {line.strip() for line in existing.splitlines()}:
-            return
-        addition = "# Local benchmark workspaces\n.benchmark-workspaces/"
+        addition = "\n".join(additions)
         if existing.strip():
             append_text(gitignore_path, addition)
         else:
             write_text(gitignore_path, addition)
+
+    def uses_rust_wasm_toolchain(self) -> bool:
+        return self.scenario_meta.get("runtime") == "rust-wasm"
+
+    def source_extensions(self) -> set[str]:
+        return RUST_WASM_SOURCE_EXTENSIONS if self.uses_rust_wasm_toolchain() else NODE_SOURCE_EXTENSIONS
+
+    def add_issue(self, result: ArmResult, message: str) -> None:
+        if message and message not in result.issues:
+            result.issues.append(message)
+
+    def normalize_result_lists(self, result: ArmResult) -> None:
+        result.issues = dedupe_preserve_order(result.issues)
+        result.screenshot_paths = dedupe_preserve_order(result.screenshot_paths)
+        result.recursive_claimed_files = dedupe_preserve_order(result.recursive_claimed_files)
+        result.recursive_product_change_paths = dedupe_preserve_order(result.recursive_product_change_paths)
+        result.recursive_root_product_drift = dedupe_preserve_order(result.recursive_root_product_drift)
+        result.recursive_missing_claimed_files = dedupe_preserve_order(result.recursive_missing_claimed_files)
+
+    def clear_recursive_evaluation_issues(self, result: ArmResult) -> None:
+        result.issues = [
+            issue
+            for issue in result.issues
+            if not any(issue.startswith(prefix) for prefix in RECURSIVE_EVALUATION_ISSUE_PREFIXES)
+        ]
+
+    def is_control_plane_path(self, rel_path: str) -> bool:
+        normalized = normalize_benchmark_path(rel_path)
+        if not normalized:
+            return False
+        if normalized == "AGENTS.md":
+            return True
+        return normalized.startswith(ALLOWED_CONTROL_PLANE_PREFIXES)
+
+    def is_product_path(self, rel_path: str) -> bool:
+        normalized = normalize_benchmark_path(rel_path)
+        if not normalized or self.is_control_plane_path(normalized):
+            return False
+        parts = [part.lower() for part in normalized.split("/") if part]
+        if any(part in IGNORED_SOURCE_DIRS or part in TRANSIENT_RUNTIME_DIR_MARKERS for part in parts[:-1]):
+            return False
+        path = Path(normalized)
+        if path.name in EXPLICIT_PRODUCT_FILE_NAMES:
+            return True
+        return path.suffix.lower() in self.source_extensions()
+
+    def benchmark_toolchain_root(self) -> Path:
+        return self.repo_source_root / BENCHMARK_TOOLCHAIN_DIRNAME
+
+    def rust_wasm_env(self) -> dict[str, str]:
+        if not self.uses_rust_wasm_toolchain():
+            return {}
+        toolchain_root = self.benchmark_toolchain_root()
+        cargo_root = toolchain_root / "cargo-root"
+        target_root = toolchain_root / "target"
+        temp_root = toolchain_root / "tmp"
+        cargo_root.mkdir(parents=True, exist_ok=True)
+        target_root.mkdir(parents=True, exist_ok=True)
+        temp_root.mkdir(parents=True, exist_ok=True)
+        install_bin = cargo_root / "bin"
+        install_bin.mkdir(parents=True, exist_ok=True)
+        existing_path = os.environ.get("PATH", "")
+        merged_path = str(install_bin)
+        if existing_path:
+            merged_path = merged_path + os.pathsep + existing_path
+        return {
+            "CARGO_TARGET_DIR": str(target_root),
+            "TEMP": str(temp_root),
+            "TMP": str(temp_root),
+            "TMPDIR": str(temp_root),
+            "PATH": merged_path,
+        }
+
+    def require_trunk_executable(self) -> str:
+        if self.trunk_exe:
+            return self.trunk_exe
+        toolchain_bin = self.benchmark_toolchain_root() / "cargo-root" / "bin"
+        for candidate in (toolchain_bin / "trunk.exe", toolchain_bin / "trunk"):
+            if candidate.exists():
+                self.trunk_exe = str(candidate)
+                return self.trunk_exe
+        cargo_bin_trunk = Path.home() / ".cargo" / "bin" / "trunk.exe"
+        if cargo_bin_trunk.exists():
+            self.trunk_exe = str(cargo_bin_trunk)
+            return self.trunk_exe
+        cargo_bin_trunk = Path.home() / ".cargo" / "bin" / "trunk"
+        if cargo_bin_trunk.exists():
+            self.trunk_exe = str(cargo_bin_trunk)
+            return self.trunk_exe
+        raise BenchmarkError("Trunk is required for the Rust/WASM benchmark scenario but was not available.")
+
+    def build_command(self) -> list[str]:
+        if self.uses_rust_wasm_toolchain():
+            return [self.require_trunk_executable(), "build", "--release"]
+        return [self.npm_exe or "npm", "run", "build"]
+
+    def test_command(self) -> list[str]:
+        if self.uses_rust_wasm_toolchain():
+            if not self.cargo_exe:
+                raise BenchmarkError("cargo is required for the Rust/WASM benchmark scenario but was not available.")
+            return [self.cargo_exe, "test"]
+        return [self.npm_exe or "npm", "run", "test"]
+
+    def preview_command(self, port: int) -> list[str]:
+        if self.uses_rust_wasm_toolchain():
+            return [
+                self.require_trunk_executable(),
+                "serve",
+                "--release",
+                "--address",
+                DEFAULT_PREVIEW_HOST,
+                "--port",
+                str(port),
+            ]
+        return [self.npm_exe or "npm", "run", "preview", "--", "--host", DEFAULT_PREVIEW_HOST, "--port", str(port)]
+
+    def prepare_rust_wasm_toolchain(self, logs_root: Path, result: ArmResult) -> None:
+        if not self.cargo_exe or not self.rustup_exe:
+            raise BenchmarkError("Rust/WASM benchmark scenarios require both cargo and rustup to be installed.")
+
+        self.write_arm_progress(
+            result,
+            "preparing-rust-toolchain",
+            detail="Preparing wasm target and installing Trunk for the Rust/WASM benchmark scenario.",
+        )
+
+        target_command = [self.rustup_exe, "target", "add", "wasm32-unknown-unknown"]
+        target_result = self.run_command(
+            target_command,
+            cwd=self.repo_source_root,
+            timeout_seconds=max(self.command_timeout, 900),
+            env=self.rust_wasm_env(),
+            check=False,
+        )
+        self.write_command_log(logs_root / "rust-target.log", command_string(target_command), target_result)
+        result.log_paths["rust_target"] = self.rel(logs_root / "rust-target.log")
+        result.phase_durations["rust_target"] = round(target_result.duration_seconds, 2)
+        if target_result.returncode != 0 or target_result.timed_out:
+            raise BenchmarkError("Failed to prepare the wasm32 Rust target for the Rust/WASM benchmark scenario.")
+
+        if not self.trunk_exe:
+            if not self.try_download_prebuilt_trunk(logs_root, result):
+                trunk_install_command = [
+                    self.cargo_exe,
+                    "install",
+                    "trunk",
+                    "--locked",
+                    "--root",
+                    str(self.benchmark_toolchain_root() / "cargo-root"),
+                ]
+                trunk_result = self.run_command(
+                    trunk_install_command,
+                    cwd=self.repo_source_root,
+                    timeout_seconds=max(self.command_timeout, DEFAULT_RUST_TOOL_TIMEOUT_SECONDS),
+                    env=self.rust_wasm_env(),
+                    check=False,
+                )
+                self.write_command_log(
+                    logs_root / "trunk-install.log",
+                    command_string(trunk_install_command),
+                    trunk_result,
+                )
+                result.log_paths["trunk_install"] = self.rel(logs_root / "trunk-install.log")
+                result.phase_durations["trunk_install"] = round(trunk_result.duration_seconds, 2)
+                if trunk_result.returncode != 0 or trunk_result.timed_out:
+                    raise BenchmarkError("Failed to install Trunk for the Rust/WASM benchmark scenario.")
+                self.trunk_exe = shutil.which("trunk")
+                self.require_trunk_executable()
+
+        self.write_arm_progress(
+            result,
+            "rust-wasm-toolchain-ready",
+            detail="Rust, wasm target, and Trunk are ready for the benchmark scenario.",
+        )
+
+    def try_download_prebuilt_trunk(self, logs_root: Path, result: ArmResult) -> bool:
+        asset_name = self.resolve_trunk_asset_name()
+        if not asset_name:
+            return False
+
+        start = time.perf_counter()
+        downloads_root = self.benchmark_toolchain_root() / "downloads"
+        extract_root = self.benchmark_toolchain_root() / "extract"
+        bin_root = self.benchmark_toolchain_root() / "cargo-root" / "bin"
+        downloads_root.mkdir(parents=True, exist_ok=True)
+        extract_root.mkdir(parents=True, exist_ok=True)
+        bin_root.mkdir(parents=True, exist_ok=True)
+
+        download_url = f"https://github.com/trunk-rs/trunk/releases/download/v{TRUNK_VERSION}/{asset_name}"
+        archive_path = downloads_root / asset_name
+        extracted_dir = extract_root / f"trunk-{asset_name}"
+        log_path = logs_root / "trunk-download.log"
+        try:
+            with urllib.request.urlopen(download_url, timeout=300) as response:
+                archive_path.write_bytes(response.read())
+            if extracted_dir.exists():
+                shutil.rmtree(extracted_dir)
+            extracted_dir.mkdir(parents=True, exist_ok=True)
+            if asset_name.endswith(".zip"):
+                with zipfile.ZipFile(archive_path) as archive:
+                    archive.extractall(extracted_dir)
+            else:
+                with tarfile.open(archive_path, "r:gz") as archive:
+                    archive.extractall(extracted_dir)
+
+            trunk_name = "trunk.exe" if sys.platform.startswith("win") else "trunk"
+            candidates = sorted(extracted_dir.rglob(trunk_name))
+            if not candidates:
+                raise BenchmarkError(f"Prebuilt Trunk archive {asset_name} did not contain {trunk_name}.")
+            destination = bin_root / trunk_name
+            shutil.copy2(candidates[0], destination)
+            if not sys.platform.startswith("win"):
+                destination.chmod(0o755)
+            self.trunk_exe = str(destination)
+            duration = time.perf_counter() - start
+            write_text(
+                log_path,
+                "\n".join(
+                    [
+                        f"Downloaded prebuilt Trunk asset: {asset_name}",
+                        f"URL: {download_url}",
+                        f"Archive path: {archive_path}",
+                        f"Installed binary: {destination}",
+                        f"Duration seconds: {duration:.2f}",
+                    ]
+                ),
+            )
+            result.log_paths["trunk_download"] = self.rel(log_path)
+            result.phase_durations["trunk_download"] = round(duration, 2)
+            return True
+        except Exception as exc:
+            duration = time.perf_counter() - start
+            write_text(
+                log_path,
+                "\n".join(
+                    [
+                        f"Failed to download prebuilt Trunk asset: {asset_name}",
+                        f"URL: {download_url}",
+                        f"Duration seconds: {duration:.2f}",
+                        f"Error: {exc}",
+                    ]
+                ),
+            )
+            result.log_paths["trunk_download"] = self.rel(log_path)
+            result.phase_durations["trunk_download"] = round(duration, 2)
+            return False
+
+    def resolve_trunk_asset_name(self) -> str:
+        machine = os.environ.get("PROCESSOR_ARCHITECTURE", "").lower()
+        if not machine:
+            try:
+                import platform
+
+                machine = platform.machine().lower()
+            except Exception:
+                machine = ""
+
+        if sys.platform.startswith("win") and machine in {"amd64", "x86_64"}:
+            return "trunk-x86_64-pc-windows-msvc.zip"
+        if sys.platform == "darwin" and machine in {"arm64", "aarch64"}:
+            return "trunk-aarch64-apple-darwin.tar.gz"
+        if sys.platform == "darwin" and machine in {"x86_64", "amd64"}:
+            return "trunk-x86_64-apple-darwin.tar.gz"
+        if sys.platform.startswith("linux") and machine in {"arm64", "aarch64"}:
+            return "trunk-aarch64-unknown-linux-gnu.tar.gz"
+        if sys.platform.startswith("linux") and machine in {"x86_64", "amd64"}:
+            return "trunk-x86_64-unknown-linux-gnu.tar.gz"
+        return ""
 
     def _build_runner_configs(self) -> list[RunnerConfig]:
         requested = []
@@ -303,6 +720,7 @@ class BenchmarkHarness:
         detail: str = "",
         extras: dict[str, object] | None = None,
     ) -> None:
+        self.normalize_result_lists(result)
         progress_path = self.arm_progress_path(result)
         payload: dict[str, object] = {
             "updated_at": timestamp_utc(),
@@ -317,9 +735,15 @@ class BenchmarkHarness:
             "run_id": result.run_id,
             "repo_root": result.repo_root,
             "product_root": result.product_root,
+            "expected_product_root": result.expected_product_root,
             "recursive_workflow_status": result.recursive_workflow_status,
             "recursive_isolation_status": result.recursive_isolation_status,
             "recursive_worktree_location": result.recursive_worktree_location,
+            "recursive_delivery_status": result.recursive_delivery_status,
+            "recursive_claimed_files": result.recursive_claimed_files,
+            "recursive_product_change_paths": result.recursive_product_change_paths,
+            "recursive_root_product_drift": result.recursive_root_product_drift,
+            "recursive_missing_claimed_files": result.recursive_missing_claimed_files,
             "phase_durations": result.phase_durations,
             "log_paths": result.log_paths,
             "issues": result.issues,
@@ -332,6 +756,11 @@ class BenchmarkHarness:
             "benchmark_score_method": result.benchmark_score_method,
             "judge_runner": result.judge_runner_name,
             "judge_model": result.judge_model_name,
+            "score_breakdown": result.score_breakdown,
+            "score_breakdown_max": result.score_breakdown_max,
+            "judge_adjusted_score_breakdown": result.judge_adjusted_score_breakdown,
+            "judge_adjusted_score": result.judge_adjusted_score,
+            "judge_entry_adjustments": result.judge_entry_adjustments,
         }
         if extras:
             payload.update(extras)
@@ -446,6 +875,19 @@ class BenchmarkHarness:
             ),
         )
 
+    def runner_invocation_env(self, runner_slug: str) -> dict[str, str]:
+        if runner_slug != "kimi":
+            return {}
+        return {
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONLEGACYWINDOWSSTDIO": "0",
+            "LANG": "en_US.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "NO_COLOR": "1",
+            "CLICOLOR": "0",
+        }
+
     def ensure_npm(self) -> None:
         if self.args.skip_npm_install:
             return
@@ -559,6 +1001,13 @@ class BenchmarkHarness:
 
         self.write_arm_progress(result, "evaluating", detail="Agent run finished; evaluating build, tests, preview, and artifacts.")
         self.evaluate_repo(repo_root, product_root, logs_root, result)
+        if self.reconcile_pragmatic_tdd_exception_field(repo_root, logs_root, result):
+            self.evaluate_recursive_run(repo_root, logs_root, result)
+        if self.reconcile_recursive_requirement_changed_files(repo_root, logs_root, result):
+            self.evaluate_recursive_run(repo_root, logs_root, result)
+        repair_record = self.maybe_repair_recursive_run(repo_root, logs_root, runner, result)
+        if repair_record is not None:
+            result.duration_seconds += result.phase_durations.get("recursive_repair", 0.0)
         self.write_arm_progress(result, "judging", detail="Controller-side judge review is running.")
         self.run_judge_review(repo_root, product_root, logs_root, runner, result)
         self.finalize_result(runner, agent_record, result)
@@ -566,25 +1015,33 @@ class BenchmarkHarness:
         return result
 
     def finalize_result(self, runner: RunnerConfig, agent_record: CommandResult, result: ArmResult) -> None:
-        result.product_status = "pass" if result.build_success and result.test_success and result.preview_success else "fail"
+        self.normalize_result_lists(result)
+        delivery_failed = result.arm_name == "recursive-on" and result.recursive_delivery_status not in {"n/a", "ok"}
+        result.product_status = (
+            "pass"
+            if result.build_success and result.test_success and result.preview_success and not delivery_failed
+            else "fail"
+        )
         if result.timed_out:
             result.status = "timed-out"
             return
 
-        runner_issue = self.detect_runner_issue(runner.slug, agent_record.stderr)
+        if self.is_benign_runner_exit(runner.slug, agent_record.stdout, agent_record.stderr, result):
+            result.status = "pass" if result.product_status == "pass" else "product-fail"
+            return
+
+        runner_issue = self.detect_runner_issue(runner.slug, agent_record.stdout, agent_record.stderr)
         if result.agent_status == "clean-exit":
             result.status = "pass" if result.product_status == "pass" else "product-fail"
             return
 
         if result.product_status == "pass":
             result.status = "pass-with-runner-issue"
-            result.issues.append(
-                runner_issue or "Agent execution exited non-zero after producing a passing artifact set."
-            )
+            self.add_issue(result, runner_issue or "Agent execution exited non-zero after producing a passing artifact set.")
             return
 
         result.status = "product-fail-with-runner-issue"
-        result.issues.append(runner_issue or "Agent execution exited with a non-zero status.")
+        self.add_issue(result, runner_issue or "Agent execution exited with a non-zero status.")
 
     def update_combined_benchmark_score(self, result: ArmResult) -> None:
         if result.score_max > 0:
@@ -616,8 +1073,18 @@ class BenchmarkHarness:
         )
         result.benchmark_score_method = "blended"
 
-    def detect_runner_issue(self, runner_slug: str, stderr: str) -> str:
-        lower = stderr.lower()
+    def is_benign_runner_exit(self, runner_slug: str, stdout: str, stderr: str, result: ArmResult) -> bool:
+        if runner_slug != "kimi":
+            return False
+        combined = f"{stdout}\n{stderr}".lower()
+        if "does not support required capability: image_in" not in combined:
+            return False
+        if result.product_status != "pass":
+            return False
+        return result.arm_name != "recursive-on" or result.recursive_workflow_status == "complete"
+
+    def detect_runner_issue(self, runner_slug: str, stdout: str, stderr: str) -> str:
+        lower = f"{stdout}\n{stderr}".lower()
         if runner_slug == "kimi" and "charmap" in lower and "can't encode character" in lower:
             return "Kimi CLI hit a Windows encoding error after the benchmark work completed."
         return ""
@@ -671,7 +1138,9 @@ class BenchmarkHarness:
 
         self.git_init(repo_root)
 
-        if not self.args.skip_npm_install:
+        if self.uses_rust_wasm_toolchain():
+            self.prepare_rust_wasm_toolchain(logs_root, result)
+        elif not self.args.skip_npm_install:
             install_result = self.run_command(
                 [self.npm_exe, "install"],
                 cwd=repo_root,
@@ -702,6 +1171,7 @@ class BenchmarkHarness:
             self.write_arm_progress(result, "recursive-bootstrapped", detail="Recursive scaffold bootstrap completed.")
 
         self.git_commit(repo_root, "Benchmark starter baseline")
+        baseline_commit = self.git_head_commit(repo_root)
 
         if recursive_on:
             run_id = f"benchmark-{runner.slug}-{self.run_stamp}"
@@ -727,16 +1197,55 @@ class BenchmarkHarness:
                 raise BenchmarkError("Failed to scaffold the recursive benchmark run.")
             run_root = repo_root / ".recursive" / "run" / run_id
             run_requirements = run_root / "00-requirements.md"
-            shutil.copy2(self.requirements_path, run_requirements)
+            write_text(run_requirements, self.render_seeded_run_requirements(run_id))
             result.run_id = run_id
+            result.expected_product_root = normalize_benchmark_path(f".worktrees/{run_id}")
             result.recursive_run_root = self.rel(run_root)
             write_text(repo_root / "benchmark" / "run-id.txt", run_id)
+            expected_product_root_path = repo_root / result.expected_product_root
+            expected_product_root_file = repo_root / "benchmark" / "expected-product-root.txt"
+            write_text(expected_product_root_file, result.expected_product_root)
+            template_root = repo_root / "benchmark" / "recursive-templates"
+            self.seed_recursive_run_templates(template_root, run_id, result.expected_product_root, baseline_commit)
+            context_path = repo_root / "benchmark" / "benchmark-context.json"
+            context_payload: dict[str, object] = {}
+            if context_path.exists():
+                try:
+                    loaded_context = json.loads(context_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    loaded_context = {}
+                if isinstance(loaded_context, dict):
+                    context_payload = loaded_context
+            context_payload.update(
+                {
+                    "run_id": run_id,
+                    "expected_product_root": result.expected_product_root,
+                    "expected_product_root_exists": expected_product_root_path.exists(),
+                    "run_requirements_source": normalize_benchmark_path(
+                        str(self.requirements_path.relative_to(self.repo_source_root))
+                    ),
+                    "run_requirements_seed_mode": "controller-wrapped-phase0",
+                    "run_template_root": "benchmark/recursive-templates",
+                }
+            )
+            bootstrap_template = self.repo_source_root / "references" / "bootstrap" / "RECURSIVE.md"
+            if bootstrap_template.exists():
+                context_payload.update(
+                    {
+                        "recursive_bootstrap_source": str(bootstrap_template),
+                        "recursive_bootstrap_source_sha256": file_sha256(bootstrap_template),
+                    }
+                )
+            write_text(context_path, json.dumps(context_payload, indent=2))
             result.log_paths["recursive_run_root"] = self.rel(run_root)
             result.log_paths["run_requirements"] = self.rel(run_requirements)
+            result.log_paths["expected_product_root"] = self.rel(expected_product_root_file)
+            result.log_paths["benchmark_context"] = self.rel(context_path)
+            result.log_paths["recursive_templates"] = self.rel(template_root)
             self.write_arm_progress(
                 result,
                 "run-initialized",
-                detail="Recursive run scaffold and run-local requirements are ready.",
+                detail="Recursive run scaffold, run-local requirements, expected worktree metadata, and lint-shaped templates are ready.",
             )
 
     def git_init(self, repo_root: Path) -> None:
@@ -757,10 +1266,27 @@ class BenchmarkHarness:
         if commit_result.returncode not in (0, 1):
             raise BenchmarkError(f"Git commit failed for {repo_root}.")
 
+    def git_head_commit(self, repo_root: Path) -> str:
+        result = self.run_command(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            timeout_seconds=min(self.command_timeout, 60),
+            check=False,
+            allowed_returncodes=(0,),
+        )
+        head = result.stdout.strip()
+        if result.returncode != 0 or result.timed_out or not re.fullmatch(r"[0-9a-f]{40}", head):
+            raise BenchmarkError(f"Unable to resolve benchmark baseline commit for {repo_root}.")
+        return head
+
     def render_prompt(self, prompts_root: Path, result: ArmResult) -> tuple[str, Path | None]:
         template_path = self.prompt_on_path if result.arm_name == "recursive-on" else self.prompt_off_path
         text = template_path.read_text(encoding="utf-8")
         text = text.replace("{{RUN_ID}}", result.run_id or "benchmark-run-id-missing")
+        text = text.replace(
+            "{{EXPECTED_PRODUCT_ROOT}}",
+            result.expected_product_root or normalize_benchmark_path(f".worktrees/{result.run_id or 'benchmark-run-id-missing'}"),
+        )
         if result.arm_name == "recursive-off":
             requirements_text = self.requirements_path.read_text(encoding="utf-8").strip()
             rubric_text = self.rubric_path.read_text(encoding="utf-8").strip()
@@ -777,12 +1303,825 @@ class BenchmarkHarness:
             f"- Model: {result.model}\n"
             f"- Timeout budget: {self.args.max_minutes} minutes\n"
         )
+        if result.arm_name == "recursive-on":
+            text += f"- Expected product root: {result.expected_product_root or 'n/a'}\n"
         if result.arm_name == "recursive-off":
             return text, None
         prompts_root.mkdir(parents=True, exist_ok=True)
         prompt_path = prompts_root / f"{result.arm_name}.md"
         write_text(prompt_path, text)
         return text, prompt_path
+
+    def render_seeded_run_requirements(self, run_id: str) -> str:
+        scenario_body = self.requirements_path.read_text(encoding="utf-8").strip()
+        scenario_source = normalize_benchmark_path(str(self.requirements_path.relative_to(self.repo_source_root)))
+        locked_at = timestamp_utc()
+        provisional = "\n".join(
+            [
+                f"Run: `/.recursive/run/{run_id}/`",
+                "Phase: `00 Requirements`",
+                "Status: `LOCKED`",
+                "Workflow version: `recursive-mode-audit-v2`",
+                "Inputs:",
+                f"- Benchmark fixture: `{scenario_source}`",
+                "Outputs:",
+                f"- `/.recursive/run/{run_id}/00-requirements.md`",
+                "Scope note: This controller-seeded Phase 0 artifact preserves the benchmark scenario requirements as the locked source of truth for the recursive-on arm.",
+                f"LockedAt: `{locked_at}`",
+                f"LockHash: `{'0' * 64}`",
+                "",
+                "## TODO",
+                "",
+                "- [x] Seed the benchmark scenario requirements into a recursive-compliant Phase 0 artifact",
+                "- [x] Preserve stable requirement, out-of-scope, constraint, and assumption content without semantic drift",
+                "- [x] Mark the seeded benchmark requirements ready for downstream recursive phases",
+                "",
+                scenario_body,
+                "",
+                "## Coverage Gate",
+                "",
+                "- [x] The benchmark scenario requirements are mirrored in this run-local artifact",
+                "- [x] The required Phase 0 sections and identifiers are present",
+                "Coverage: PASS",
+                "",
+                "## Approval Gate",
+                "",
+                "- [x] The recursive-on arm has a locked Phase 0 requirements artifact before execution begins",
+                "- [x] Downstream phases can treat this file as the benchmark source of truth",
+                "Approval: PASS",
+            ]
+        )
+        lock_hash = lock_hash_from_content(provisional)
+        return provisional.replace(f"`{'0' * 64}`", f"`{lock_hash}`", 1)
+
+    def benchmark_requirement_specs(self) -> list[BenchmarkRequirementSpec]:
+        requirements_text = self.requirements_path.read_text(encoding="utf-8")
+        specs: list[BenchmarkRequirementSpec] = []
+        pattern = re.compile(r"(?ms)^###\s+`(R\d+)`\s+([^\r\n]+)\s*\n\s*\nDescription:\s*([^\r\n]+)")
+        for match in pattern.finditer(requirements_text):
+            requirement_id, title, description = match.groups()
+            specs.append(
+                BenchmarkRequirementSpec(
+                    requirement_id=requirement_id.strip(),
+                    title=title.strip(),
+                    source_quote=f"Description: {description.strip()}",
+                )
+            )
+        return specs
+
+    def seed_recursive_run_templates(
+        self,
+        template_root: Path,
+        run_id: str,
+        expected_product_root: str,
+        baseline_commit: str,
+    ) -> None:
+        for file_name, content in self.render_recursive_template_files(
+            run_id,
+            expected_product_root,
+            baseline_commit,
+        ).items():
+            write_text(template_root / file_name, content)
+        repo_root = template_root.parent.parent
+        evidence_root = repo_root / ".recursive" / "run" / run_id / "evidence"
+        for path in (
+            evidence_root / "logs" / "baseline",
+            evidence_root / "logs" / "green",
+            evidence_root / "manual",
+            evidence_root / "screenshots",
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+    def render_recursive_template_files(
+        self,
+        run_id: str,
+        expected_product_root: str,
+        baseline_commit: str,
+    ) -> dict[str, str]:
+        specs = self.benchmark_requirement_specs()
+        worktree_root = normalize_benchmark_path(expected_product_root)
+        baseline_example = f".recursive/run/{run_id}/evidence/logs/baseline/replace-me.log"
+        green_example = f".recursive/run/{run_id}/evidence/logs/green/replace-me.log"
+        qa_evidence_example = f".recursive/run/{run_id}/evidence/manual/replace-me.txt"
+        screenshot_evidence_example = f".recursive/run/{run_id}/evidence/screenshots/replace-me.png"
+        product_screenshot_example = f"{worktree_root}/benchmark/screenshots/replace-me.png"
+        product_agent_log_example = f"{worktree_root}/benchmark/agent-log.md"
+
+        def header(phase: str, file_name: str, inputs: list[str], scope_note: str) -> list[str]:
+            return [
+                f"Run: `/.recursive/run/{run_id}/`",
+                f"Phase: `{phase}`",
+                "Status: `DRAFT`",
+                "Inputs:",
+                *[f"- `{path}`" for path in inputs],
+                "Outputs:",
+                f"- `/.recursive/run/{run_id}/{file_name}`",
+                f"Scope note: {scope_note}",
+                "",
+            ]
+
+        def phase1_requirement_lines() -> list[str]:
+            lines: list[str] = []
+            for spec in specs:
+                lines.append(
+                    f"- {spec.requirement_id} | Status: blocked | Rationale: TODO replace with the concrete baseline gap for {spec.requirement_id}. | "
+                    "Blocking Evidence: TODO replace with existing repo-root-relative evidence paths such as "
+                    f"`benchmark/expected-product-root.txt`, `{worktree_root}/Cargo.toml`, or `{baseline_example}`. "
+                    "Use actual files or current-run artifacts, not prose or bare directories like `src/`. | Audit Note: TODO"
+                )
+            return lines
+
+        def phase2_mapping_lines() -> list[str]:
+            lines: list[str] = []
+            for spec in specs:
+                lines.append(
+                    f"- {spec.requirement_id} | Source Quote: {spec.source_quote} | Coverage: direct | "
+                    f"Implementation Surface: TODO repo-root-relative product paths such as `{worktree_root}/src/main.rs` or `{worktree_root}/src/lib.rs` | "
+                    f"Verification Surface: TODO tests or evidence such as `{green_example}` | "
+                    f"QA Surface: TODO audited QA evidence such as `{screenshot_evidence_example}`"
+                )
+            return lines
+
+        def phase2_status_lines() -> list[str]:
+            lines: list[str] = []
+            for spec in specs:
+                lines.append(
+                    f"- {spec.requirement_id} | Status: planned | "
+                    f"Implementation Surface: TODO repo-root-relative product paths under `{worktree_root}/` | "
+                    f"Verification Surface: TODO verification commands or artifacts such as `{green_example}` | "
+                    f"QA Surface: TODO manual/browser evidence such as `{screenshot_evidence_example}` | Audit Note: TODO"
+                )
+            return lines
+
+        def implemented_status_lines() -> list[str]:
+            lines: list[str] = []
+            for spec in specs:
+                lines.append(
+                    f"- {spec.requirement_id} | Status: implemented | "
+                    f"Changed Files: TODO actual repo-root-relative worktree paths such as `{worktree_root}/src/main.rs` | "
+                    f"Implementation Evidence: TODO actual changed file paths or current-run artifacts such as `{green_example}` | Audit Note: TODO"
+                )
+            return lines
+
+        def verified_status_lines() -> list[str]:
+            lines: list[str] = []
+            for spec in specs:
+                lines.append(
+                    f"- {spec.requirement_id} | Status: verified | "
+                    f"Changed Files: TODO actual repo-root-relative worktree paths under `{worktree_root}/` | "
+                    f"Implementation Evidence: TODO changed file paths or current-run implementation artifacts | "
+                    f"Verification Evidence: TODO distinct test/review/QA evidence such as `{green_example}`, `{qa_evidence_example}`, or `{screenshot_evidence_example}` | Audit Note: TODO"
+                )
+            return lines
+
+        def inventory_lines() -> list[str]:
+            return [
+                f"- {spec.requirement_id} | Source Quote: {spec.source_quote} | Summary: {spec.title} | Disposition: in-scope"
+                for spec in specs
+            ]
+
+        def traceability_lines(note: str) -> list[str]:
+            return [f"- {spec.requirement_id} -> TODO {note}" for spec in specs]
+
+        def audit_sections(requirement_lines: list[str], inputs: list[str], gap_note: str) -> list[str]:
+            return [
+                "## Audit Context",
+                "",
+                "- Audit Execution Mode: self-audit",
+                "- Subagent Availability: unavailable",
+                "- Subagent Capability Probe: Benchmark runner prompt does not expose durable delegated subagent execution in this disposable repo.",
+                "- Delegation Decision Basis: Use self-audit unless the runner proves subagent support during the benchmark.",
+                "- Audit Inputs Provided:",
+                *[f"  - `{path}`" for path in inputs],
+                "",
+                "## Effective Inputs Re-read",
+                "",
+                *[f"- `{path}`" for path in inputs],
+                "",
+                "## Earlier Phase Reconciliation",
+                "",
+                "- No earlier audited phase drift has been reconciled in this template yet; replace with actual reconciliation notes before locking.",
+                "",
+                "## Subagent Contribution Verification",
+                "",
+                "- Reviewed Action Records: none (self-audit draft scaffold)",
+                f"- Main-Agent Verification Performed: `.recursive/run/{run_id}/00-requirements.md`, `.recursive/RECURSIVE.md`",
+                "- Acceptance Decision: accepted",
+                "- Refresh Handling: No delegated artifacts were refreshed in this self-audit draft scaffold.",
+                "- Repair Performed After Verification: Replace with concrete audit repairs if this phase changes after verification.",
+                "",
+                "## Worktree Diff Audit",
+                "",
+                "- Baseline type: commit",
+                f"- Baseline reference: `{baseline_commit}`",
+                "- Comparison reference: working-tree",
+                f"- Normalized baseline: `{baseline_commit}`",
+                "- Normalized comparison: working-tree",
+                f"- Normalized diff command: `git diff --name-only {baseline_commit}`",
+                "- Reviewed paths: TODO replace with the actual diff-owned paths for this phase.",
+                "",
+                "## Gaps Found",
+                "",
+                f"- {gap_note}",
+                "",
+                "## Repair Work Performed",
+                "",
+                "- Template scaffold only. Replace with any real audit-repair work performed before locking.",
+                "",
+                "## Requirement Completion Status",
+                "",
+                *requirement_lines,
+                "",
+                "## Audit Verdict",
+                "",
+                "Audit: FAIL",
+                "- Summary: Draft scaffold only; replace placeholders, rerun the audit, then promote to PASS before locking.",
+                "",
+                "## Coverage Gate",
+                "",
+                "Coverage: FAIL",
+                "",
+                "## Approval Gate",
+                "",
+                "Approval: FAIL",
+            ]
+
+        files: dict[str, str] = {}
+
+        files["00-worktree.md"] = "\n".join(
+            header(
+                "00 Worktree",
+                "00-worktree.md",
+                [".recursive/run/{run_id}/00-requirements.md".format(run_id=run_id), ".recursive/RECURSIVE.md"],
+                "Copy this template into the real run artifact, then replace all TODO text with the actual directory and safety decisions for this benchmark run.",
+            )
+            + [
+                "## TODO",
+                "",
+                "- [ ] Copy this template into `/.recursive/run/{run-id}/00-worktree.md` and replace all TODO placeholders.",
+                f"- [ ] Use repo-root-relative paths in later artifacts, e.g. `{worktree_root}/src/main.rs` rather than `src/main.rs`.",
+                f"- [ ] Keep the diff-basis fields executable if you change them, and preserve the full 40-character baseline commit `{baseline_commit}` instead of shortening it.",
+                "",
+                "## Directory Selection",
+                "",
+                f"- Selected worktree location: `{worktree_root}`",
+                f"- Product root: `{worktree_root}`",
+                "- Rationale: TODO replace with the actual worktree-selection rationale.",
+                "",
+                "## Safety Verification",
+                "",
+                "- TODO confirm the control-plane repo root remains protected from product edits.",
+                "",
+                "## Worktree Creation",
+                "",
+                f"- Expected location: `{worktree_root}`",
+                "- Creation status: TODO replace with actual command/results.",
+                "",
+                "## Main Branch Protection",
+                "",
+                "- TODO record how main/root drift is avoided.",
+                "",
+                "## Project Setup",
+                "",
+                f"- Template pack: `benchmark/recursive-templates/`",
+                f"- Seeded requirements: `.recursive/run/{run_id}/00-requirements.md`",
+                "",
+                "## Test Baseline Verification",
+                "",
+                "- TODO record the starter baseline commands and results before implementation begins.",
+                "",
+                "## Worktree Context",
+                "",
+                "- TODO note the product root, benchmark logs location, and any toolchain setup needed for the run.",
+                "",
+                "## Diff Basis For Later Audits",
+                "",
+                "- Baseline type: commit",
+                f"- Baseline reference: `{baseline_commit}`",
+                "- Comparison reference: working-tree",
+                f"- Normalized baseline: `{baseline_commit}`",
+                "- Normalized comparison: working-tree",
+                f"- Normalized diff command: `git diff --name-only {baseline_commit}`",
+                "- If you edit these fields, keep the full 40-character commit hash and an executable diff command.",
+                "",
+                "## Traceability",
+                "",
+                f"- Source requirements: `.recursive/run/{run_id}/00-requirements.md`",
+                f"- Expected product root metadata: `benchmark/expected-product-root.txt`",
+                f"- Benchmark context: `benchmark/benchmark-context.json`",
+            ]
+        )
+
+        files["01-as-is.md"] = "\n".join(
+            header(
+                "01 As-Is",
+                "01-as-is.md",
+                [
+                    f".recursive/run/{run_id}/00-requirements.md",
+                    ".recursive/RECURSIVE.md",
+                    "benchmark/benchmark-context.json",
+                    "benchmark/expected-product-root.txt",
+                ],
+                "Copy this template into the real Phase 1 artifact and replace every TODO with actual baseline findings before locking.",
+            )
+            + [
+                "## TODO",
+                "",
+                f"- [ ] Replace placeholder evidence with real repo-root-relative paths under `{worktree_root}/` or `/.recursive/run/{run_id}/`.",
+                "- [ ] Keep prose in `Rationale`; keep `Blocking Evidence` limited to concrete existing file or artifact paths.",
+                "- [ ] Keep `Gaps Found` limited to real audit defects in the analysis itself; expected blank-starter feature gaps belong in baseline findings and requirement status, not unresolved PASS-blocking gaps.",
+                "- [ ] Mention every in-scope requirement ID explicitly in `Traceability` and use `None because ...` if no prior recursive evidence applies.",
+                "- [ ] Do not lock while any placeholder or example text remains.",
+                "",
+                "## Reproduction Steps (Novice-Runnable)",
+                "",
+                "- TODO record the exact starter-baseline commands a novice could run before implementation.",
+                "",
+                "## Current Behavior by Requirement",
+                "",
+                "- TODO summarize the current baseline behavior for each in-scope requirement.",
+                "",
+                "## Source Requirement Inventory",
+                "",
+                *inventory_lines(),
+                "",
+                "## Relevant Code Pointers",
+                "",
+                f"- `{worktree_root}/Cargo.toml`",
+                f"- `{worktree_root}/Cargo.lock`",
+                f"- `.recursive/run/{run_id}/00-requirements.md`",
+                f"- `{product_agent_log_example}`",
+                "",
+                "## Known Unknowns",
+                "",
+                "- TODO list unresolved baseline questions or assumptions that matter before planning.",
+                "",
+                "## Evidence",
+                "",
+                "- `benchmark/benchmark-context.json`",
+                "- `benchmark/expected-product-root.txt`",
+                f"- `.recursive/run/{run_id}/00-requirements.md`",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("tie the baseline finding, blocking evidence, and rationale back to this requirement."),
+                "",
+                "## Prior Recursive Evidence Reviewed",
+                "",
+                "- None because this benchmark run starts from a fresh disposable workspace and no earlier `.recursive/run/...` or `.recursive/memory/...` path is relevant.",
+                "",
+            ]
+            + audit_sections(
+                phase1_requirement_lines(),
+                [
+                    f".recursive/run/{run_id}/00-requirements.md",
+                    ".recursive/RECURSIVE.md",
+                    "benchmark/benchmark-context.json",
+                    "benchmark/expected-product-root.txt",
+                ],
+                "Draft scaffold only; baseline analysis and blocking evidence still need to be filled in. When the phase is otherwise complete, keep `Gaps Found` limited to actual audit defects; expected starter gaps belong in the baseline findings and requirement status instead.",
+            )
+        )
+
+        files["02-to-be-plan.md"] = "\n".join(
+            header(
+                "02 To-Be Plan",
+                "02-to-be-plan.md",
+                [
+                    f".recursive/run/{run_id}/00-requirements.md",
+                    f".recursive/run/{run_id}/01-as-is.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 2 artifact and replace every TODO with a lock-valid plan. Planned statuses must use Implementation Surface / Verification Surface / QA Surface only.",
+            )
+            + [
+                "## TODO",
+                "",
+                f"- [ ] Use repo-root-relative product paths such as `{worktree_root}/src/main.rs`, not `src/main.rs`.",
+                "- [ ] Do not use `Changed Files` or `Plan Evidence` in Phase 2 `Status: planned*` entries.",
+                f"- [ ] Use exact evidence targets such as `{green_example}` and `{screenshot_evidence_example}`; do not cite globs like `{worktree_root}/benchmark/screenshots/*.png`.",
+                "- [ ] If screenshot tooling may inline image bytes, plan to finish the written receipts first and use file-only capture as the final QA evidence step.",
+                "- [ ] If implementation collapses files later, update the plan and later receipts so they cite only final real paths.",
+                "",
+                "## Planned Changes by File",
+                "",
+                f"- TODO replace with actual planned repo-root-relative paths under `{worktree_root}/` and brief rationale per file.",
+                "",
+                "## Requirement Mapping",
+                "",
+                *phase2_mapping_lines(),
+                "",
+                "## Implementation Steps",
+                "",
+                "- TODO break the implementation into concrete ordered steps.",
+                "",
+                "## Testing Strategy",
+                "",
+                f"- TODO list the exact commands, target coverage, and evidence paths you plan to produce under `/.recursive/run/{run_id}/evidence/`.",
+                "",
+                "## Playwright Plan (if applicable)",
+                "",
+                "- TODO note browser automation or explicitly say it is not applicable for this run.",
+                "",
+                "## Manual QA Scenarios",
+                "",
+                "- TODO describe the manual/browser scenarios you will use for calculator validation.",
+                "",
+                "## Idempotence and Recovery",
+                "",
+                "- TODO explain how to recover if the worktree, toolchain, or browser preview needs to be rerun.",
+                "",
+                "## Implementation Sub-phases",
+                "",
+                "- TODO list the concrete sub-phases that map back to the requirement coverage.",
+                "",
+                "## Plan Drift Check",
+                "",
+                "- TODO record any merged or indirect coverage decisions and explain why they are lossless.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("link the planned files, test strategy, and QA plan back to this requirement."),
+                "",
+                "## Prior Recursive Evidence Reviewed",
+                "",
+                "- None because only the current run baseline is relevant and there is no earlier durable recursive evidence path to cite.",
+                "",
+            ]
+            + audit_sections(
+                phase2_status_lines(),
+                [
+                    f".recursive/run/{run_id}/00-requirements.md",
+                    f".recursive/run/{run_id}/01-as-is.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; planned implementation, verification, and QA surfaces still need real paths.",
+            )
+        )
+
+        files["03-implementation-summary.md"] = "\n".join(
+            header(
+                "03 Implementation Summary",
+                "03-implementation-summary.md",
+                [
+                    f".recursive/run/{run_id}/02-to-be-plan.md",
+                    f".recursive/run/{run_id}/01-as-is.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 3 artifact and replace placeholders with only the final files that actually exist in the finished worktree.",
+            )
+            + [
+                "## TODO",
+                "",
+                f"- [ ] Cite only final repo-root-relative paths such as `{worktree_root}/src/main.rs`; do not claim hypothetical split files that were never created.",
+                "- [ ] Keep implementation evidence tied to changed files or current-run artifacts.",
+                f"- [ ] Preserve the bare gate line `TDD Compliance: PASS|FAIL` and, in pragmatic mode, replace the placeholder compensating validation with exact files under `/.recursive/run/{run_id}/evidence/`.",
+                "- [ ] If using pragmatic TDD, replace the placeholder exception with real evidence paths under the current run evidence/ directory.",
+                "",
+                "## Changes Applied",
+                "",
+                f"- TODO replace with the actual changed repo-root-relative paths under `{worktree_root}/` and what changed in each.",
+                "",
+                "## TDD Compliance Log",
+                "",
+                "- TDD Mode: pragmatic",
+                "- Summary: TODO replace with the actual TDD approach used in this run.",
+                "TDD Compliance: FAIL",
+                "",
+                "## Pragmatic TDD Exception",
+                "",
+                "- Exception reason: TODO explain why pragmatic mode was necessary for this run.",
+                f"- Compensating validation: TODO cite real evidence under `/{green_example}` or another current-run evidence path.",
+                "",
+                "## Plan Deviations",
+                "",
+                "- TODO list any deviations from Phase 2 and why they were safe.",
+                "",
+                "## Implementation Evidence",
+                "",
+                f"- TODO cite actual changed files and current-run artifacts such as `{green_example}`.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("tie the implemented work back to exact changed files and implementation evidence."),
+                "",
+            ]
+            + audit_sections(
+                implemented_status_lines(),
+                [
+                    f".recursive/run/{run_id}/02-to-be-plan.md",
+                    f".recursive/run/{run_id}/01-as-is.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; implementation receipts and evidence paths still need real values.",
+            )
+        )
+
+        files["04-test-summary.md"] = "\n".join(
+            header(
+                "04 Test Summary",
+                "04-test-summary.md",
+                [
+                    f".recursive/run/{run_id}/03-implementation-summary.md",
+                    f".recursive/run/{run_id}/02-to-be-plan.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 4 artifact and replace placeholders with exact commands, results, and verification evidence.",
+            )
+            + [
+                "## TODO",
+                "",
+                f"- [ ] Keep product file citations repo-root-relative under `{worktree_root}/`.",
+                "- [ ] Keep verification evidence distinct from the implementation evidence; test logs, screenshots, and review receipts count.",
+                f"- [ ] Do not cite globs in audited receipts; if you capture `{product_screenshot_example}`, also copy or cite the exact file under `{screenshot_evidence_example}`.",
+                "- [ ] Prefer file-only screenshot capture and do not reopen `.png` evidence in the model; if inline-image tooling is unavoidable, leave it as the last step after the written receipts are ready.",
+                "- [ ] Replace the prior-evidence note if earlier recursive evidence actually became relevant.",
+                "",
+                "## Pre-Test Implementation Audit",
+                "",
+                "- TODO record what you checked before running tests.",
+                "",
+                "## Environment",
+                "",
+                "- TODO record the relevant toolchain/runtime environment for the executed tests.",
+                "",
+                "## Execution Mode",
+                "",
+                "- TODO record whether test execution was automated, manual, or mixed.",
+                "",
+                "## Commands Executed (Exact)",
+                "",
+                "- TODO paste the exact commands that were run.",
+                "",
+                "## Results Summary",
+                "",
+                "- TODO summarize build/test/preview outcomes with exit codes and notable observations.",
+                "",
+                "## Evidence and Artifacts",
+                "",
+                f"- TODO cite current-run verification artifacts such as `{green_example}`, `{qa_evidence_example}`, and `{screenshot_evidence_example}`.",
+                "",
+                "## Failures and Diagnostics (if any)",
+                "",
+                "- TODO record failures, diagnostics, or explicitly say none.",
+                "",
+                "## Flake/Rerun Notes",
+                "",
+                "- TODO note any reruns or explicitly say none.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("map the verification commands and exact evidence files that proved this requirement."),
+                "",
+                "## Prior Recursive Evidence Reviewed",
+                "",
+                "- None because the current run artifacts provide the required evidence and no earlier recursive run or memory path was needed.",
+                "",
+            ]
+            + audit_sections(
+                verified_status_lines(),
+                [
+                    f".recursive/run/{run_id}/03-implementation-summary.md",
+                    f".recursive/run/{run_id}/02-to-be-plan.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; exact command output and verification evidence still need real values.",
+            )
+        )
+
+        files["05-manual-qa.md"] = "\n".join(
+            header(
+                "05 Manual QA",
+                "05-manual-qa.md",
+                [
+                    f".recursive/run/{run_id}/04-test-summary.md",
+                    f".recursive/run/{run_id}/03-implementation-summary.md",
+                ],
+                "Copy this template into the real Phase 5 receipt and replace placeholders with the actual QA execution record and evidence.",
+            )
+            + [
+                "## TODO",
+                "",
+                "- [ ] Replace all QA placeholders with the real execution metadata and evidence.",
+                "- [ ] Keep screenshot and browser evidence repo-root-relative if the app runs in the isolated worktree.",
+                f"- [ ] For `QA Execution Mode: agent-operated`, cite exact files under `/.recursive/run/{run_id}/evidence/` such as `{qa_evidence_example}` or `{screenshot_evidence_example}`.",
+                "- [ ] Use file-only screenshot capture, cite screenshot paths without reopening the images, and leave any risky inline-image capture path until the end.",
+                "",
+                "## QA Execution Record",
+                "",
+                "- QA Execution Mode: agent-operated",
+                "- Agent Executor: TODO",
+                "- Tools Used: TODO",
+                "- Notes: TODO",
+                "",
+                "## QA Scenarios and Results",
+                "",
+                "- TODO list each QA scenario, outcome, and any follow-up notes.",
+                "",
+                "## Evidence and Artifacts",
+                "",
+                f"- TODO cite QA evidence such as `{qa_evidence_example}` and `{screenshot_evidence_example}`.",
+                "",
+                "## User Sign-Off",
+                "",
+                "- Approved by: not required for agent-operated mode",
+                "- Date: not required for agent-operated mode",
+                "- Notes: TODO if human sign-off becomes necessary.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("connect the QA scenario, outcome, and exact evidence files back to this requirement."),
+                "",
+                "## Coverage Gate",
+                "",
+                "Coverage: FAIL",
+                "",
+                "## Approval Gate",
+                "",
+                "Approval: FAIL",
+            ]
+        )
+
+        files["06-decisions-update.md"] = "\n".join(
+            header(
+                "06 Decisions Update",
+                "06-decisions-update.md",
+                [
+                    f".recursive/run/{run_id}/04-test-summary.md",
+                    ".recursive/DECISIONS.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 6 receipt and replace placeholders with the actual decisions delta and closeout evidence.",
+            )
+            + [
+                "## TODO",
+                "",
+                "- [ ] Record only actual decisions changes and cite the resulting DECISIONS entry.",
+                "- [ ] Keep requirement statuses at verified or an explicitly approved non-completion state.",
+                "",
+                "## Decisions Changes Applied",
+                "",
+                "- TODO describe the decisions delta applied in this run.",
+                "",
+                "## Rationale",
+                "",
+                "- TODO explain why the decisions update was needed.",
+                "",
+                "## Resulting Decision Entry",
+                "",
+                "- TODO cite `.recursive/DECISIONS.md` and the specific entry updated or added.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("connect the decisions delta back to verified implementation and verification evidence."),
+                "",
+            ]
+            + audit_sections(
+                verified_status_lines(),
+                [
+                    f".recursive/run/{run_id}/04-test-summary.md",
+                    ".recursive/DECISIONS.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; decisions delta and verified closeout evidence still need real values.",
+            )
+        )
+
+        files["07-state-update.md"] = "\n".join(
+            header(
+                "07 State Update",
+                "07-state-update.md",
+                [
+                    f".recursive/run/{run_id}/06-decisions-update.md",
+                    ".recursive/STATE.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 7 receipt and replace placeholders with the actual state delta and closeout evidence.",
+            )
+            + [
+                "## TODO",
+                "",
+                "- [ ] Record the actual state delta for this run.",
+                "- [ ] Replace the prior-evidence note if earlier recursive evidence became relevant.",
+                "",
+                "## State Changes Applied",
+                "",
+                "- TODO describe the state delta applied in this run.",
+                "",
+                "## Rationale",
+                "",
+                "- TODO explain why the state update was needed.",
+                "",
+                "## Resulting State Summary",
+                "",
+                "- TODO cite `.recursive/STATE.md` and summarize the new durable state.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("connect the state delta back to verified implementation and verification evidence."),
+                "",
+                "## Prior Recursive Evidence Reviewed",
+                "",
+                "- None because no earlier recursive run or memory path was reviewed beyond the current benchmark run state.",
+                "",
+            ]
+            + audit_sections(
+                verified_status_lines(),
+                [
+                    f".recursive/run/{run_id}/06-decisions-update.md",
+                    ".recursive/STATE.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; state delta and verified closeout evidence still need real values.",
+            )
+        )
+
+        files["08-memory-impact.md"] = "\n".join(
+            header(
+                "08 Memory Impact",
+                "08-memory-impact.md",
+                [
+                    f".recursive/run/{run_id}/07-state-update.md",
+                    ".recursive/memory/MEMORY.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Copy this template into the real Phase 8 receipt and replace placeholders with the actual memory review and skill-usage conclusions.",
+            )
+            + [
+                "## TODO",
+                "",
+                "- [ ] Replace all placeholder memory and skill-usage notes with the actual run conclusions.",
+                "- [ ] Keep final requirement statuses verified or explicitly approved non-completion states.",
+                "",
+                "## Diff Basis",
+                "",
+                "- Baseline type: commit",
+                f"- Baseline reference: `{baseline_commit}`",
+                "- Comparison reference: working-tree",
+                f"- Normalized baseline: `{baseline_commit}`",
+                "- Normalized comparison: working-tree",
+                f"- Normalized diff command: `git diff --name-only {baseline_commit}`",
+                "",
+                "## Changed Paths Review",
+                "",
+                "- TODO summarize the diff-owned paths reviewed for memory impact.",
+                "",
+                "## Affected Memory Docs",
+                "",
+                "- TODO cite any memory docs updated, or explicitly say none.",
+                "",
+                "## Run-Local Skill Usage Capture",
+                "",
+                "- Skill Usage Relevance: relevant",
+                "- Available Skills: TODO",
+                "- Skills Sought: TODO",
+                "- Skills Attempted: TODO",
+                "- Skills Used: TODO",
+                "- Worked Well: TODO",
+                "- Issues Encountered: TODO",
+                "- Future Guidance: TODO",
+                "- Promotion Candidates: TODO",
+                "",
+                "## Skill Memory Promotion Review",
+                "",
+                "- Durable Skill Lessons Promoted: TODO",
+                "- Generalized Guidance Updated: TODO",
+                "- Run-Local Observations Left Unpromoted: TODO",
+                "- Promotion Decision Rationale: TODO",
+                "",
+                "## Uncovered Paths",
+                "",
+                "- TODO note any relevant paths left uncovered, or explicitly say none.",
+                "",
+                "## Router and Parent Refresh",
+                "",
+                "- TODO record any router/parent refresh work or explicitly say none.",
+                "",
+                "## Final Status Summary",
+                "",
+                "- TODO summarize final benchmark completion state, remaining gaps, and durability impact.",
+                "",
+                "## Traceability",
+                "",
+                *traceability_lines("connect the memory review or skill conclusion back to verified run evidence."),
+                "",
+                "## Prior Recursive Evidence Reviewed",
+                "",
+                "- None because no earlier recursive run or memory path was reviewed beyond the current benchmark run state.",
+                "",
+            ]
+            + audit_sections(
+                verified_status_lines(),
+                [
+                    f".recursive/run/{run_id}/07-state-update.md",
+                    ".recursive/memory/MEMORY.md",
+                    ".recursive/RECURSIVE.md",
+                ],
+                "Draft scaffold only; memory review and skill-promotion conclusions still need real values.",
+            )
+        )
+
+        return files
 
     def run_model_prompt(
         self,
@@ -811,7 +2150,13 @@ class BenchmarkHarness:
                 "-p",
                 prompt_text,
             ]
-            record = self.run_command(command, cwd=repo_root, timeout_seconds=timeout_seconds, check=False)
+            record = self.run_command(
+                command,
+                cwd=repo_root,
+                timeout_seconds=timeout_seconds,
+                env=self.runner_invocation_env(runner_slug),
+                check=False,
+            )
         elif runner_slug == "codex":
             command = [
                 executable or "codex",
@@ -824,7 +2169,13 @@ class BenchmarkHarness:
                 str(repo_root),
                 prompt_text,
             ]
-            record = self.run_command(command, cwd=repo_root, timeout_seconds=timeout_seconds, check=False)
+            record = self.run_command(
+                command,
+                cwd=repo_root,
+                timeout_seconds=timeout_seconds,
+                env=self.runner_invocation_env(runner_slug),
+                check=False,
+            )
         elif runner_slug == "kimi":
             temp_config = self.build_kimi_temp_config(model)
             try:
@@ -840,7 +2191,13 @@ class BenchmarkHarness:
                     "--prompt",
                     prompt_text,
                 ]
-                record = self.run_command(command, cwd=repo_root, timeout_seconds=timeout_seconds, check=False)
+                record = self.run_command(
+                    command,
+                    cwd=repo_root,
+                    timeout_seconds=timeout_seconds,
+                    env=self.runner_invocation_env(runner_slug),
+                    check=False,
+                )
             finally:
                 if temp_config.exists():
                     temp_config.unlink()
@@ -875,9 +2232,257 @@ class BenchmarkHarness:
         result.log_paths["agent_stderr"] = self.rel(stderr_log)
         return record
 
+    @staticmethod
+    def collect_recursive_lint_findings(lint_log_path: Path, limit: int = 12) -> list[str]:
+        if not lint_log_path.exists():
+            return []
+        findings: list[str] = []
+        for raw_line in lint_log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if line.startswith("[FAIL]") or line.startswith("[WARN] Missing artifact"):
+                findings.append(line)
+            if len(findings) >= limit:
+                break
+        return findings
+
+    @staticmethod
+    def lint_has_only_optional_missing_artifact_warnings(lint_log_path: Path) -> bool:
+        if not lint_log_path.exists():
+            return False
+        optional_missing = {"01.5-root-cause.md", "03.5-code-review.md"}
+        saw_optional_warning = False
+        for raw_line in lint_log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line == "[FAIL] Lint failed":
+                continue
+            if line.startswith("[FAIL]"):
+                return False
+            if line.startswith("[WARN] Missing artifact"):
+                artifact_name = Path(line.split(":", 1)[1].strip()).name
+                if artifact_name not in optional_missing:
+                    return False
+                saw_optional_warning = True
+                continue
+            if line.startswith("[WARN]"):
+                return False
+        return saw_optional_warning
+
+    def reconcile_pragmatic_tdd_exception_field(self, repo_root: Path, logs_root: Path, result: ArmResult) -> bool:
+        if result.arm_name != "recursive-on" or not result.run_id or result.recursive_workflow_status != "lint-failed":
+            return False
+        lint_findings = self.collect_recursive_lint_findings(logs_root / "recursive-lint.log")
+        if not any("Pragmatic TDD Exception is missing Compensating validation" in finding for finding in lint_findings):
+            return False
+        artifact_path = repo_root / ".recursive" / "run" / result.run_id / "03-implementation-summary.md"
+        if not artifact_path.exists():
+            return False
+        original = artifact_path.read_text(encoding="utf-8", errors="replace")
+        if re.search(r"(?mi)^[ \t]*(?:[-*][ \t]+)?Compensating validation:\s*\S", original):
+            return False
+        exception_body = self.get_heading_body(original, "Pragmatic TDD Exception")
+        if not exception_body:
+            return False
+        subsection_match = re.search(r"(?mi)^[ \t]*###\s+Compensating validation\s*$", exception_body)
+        if not subsection_match:
+            return False
+        normalized_body = re.sub(
+            r"(?mi)^([ \t]*###\s+Compensating validation\s*$)",
+            "- Compensating validation: See evidence paths listed below.\n\n\\1",
+            exception_body,
+            count=1,
+        )
+        if normalized_body == exception_body:
+            return False
+        updated = original.replace(exception_body, normalized_body, 1)
+        artifact_path.write_text(updated, encoding="utf-8", newline="\n")
+        return True
+
+    def should_attempt_recursive_repair(self, result: ArmResult) -> bool:
+        return result.arm_name == "recursive-on" and result.recursive_workflow_status in {"incomplete", "lint-failed"}
+
+    def build_recursive_repair_prompt(self, repo_root: Path, logs_root: Path, result: ArmResult) -> str:
+        missing_files = [name for name, present in sorted(result.recursive_artifact_status.items()) if not present]
+        run_root = f".recursive/run/{result.run_id}"
+        lint_log_path = logs_root / "recursive-lint.log"
+        lint_findings = self.collect_recursive_lint_findings(lint_log_path)
+        prompt_lines = [
+            f"Continue recursive-mode run `{result.run_id}` in this repository.",
+            "",
+            "The product implementation, build/test/preview, and benchmark workspace already exist. Focus on repairing the recursive run artifacts so controller-side recursive lint passes.",
+            "Do not re-implement the product unless an artifact fix truly requires a matching evidence refresh.",
+            "",
+            "Read:",
+            "- `.recursive/RECURSIVE.md`",
+            f"- `{run_root}/00-requirements.md`",
+            f"- `{run_root}/00-worktree.md`",
+            f"- `{run_root}/01-as-is.md`",
+            f"- `{run_root}/02-to-be-plan.md`",
+            "- `benchmark/recursive-templates/`",
+            "- `benchmark/expected-product-root.txt`",
+        ]
+        if lint_log_path.exists():
+            prompt_lines.append(f"- `{self.rel(lint_log_path)}`")
+        prompt_lines.extend(
+            [
+                "",
+                "Repair requirements:",
+                "- Complete and lock any missing required run artifacts before finishing.",
+                "- Do not stop after Phase 2 or after the product build succeeds; the run is incomplete until `03-implementation-summary.md`, `04-test-summary.md`, `05-manual-qa.md`, `06-decisions-update.md`, `07-state-update.md`, and `08-memory-impact.md` all exist and are lock-valid.",
+                "- Keep the template headings exactly as required, including `## TODO`, `## Changes Applied`, and `## Failures and Diagnostics (if any)`.",
+                "- Use the exact word `None` in `## Gaps Found` whenever `Audit: PASS` is true and there are no unresolved gaps. `No gaps` is not sufficient for strict lint.",
+                "- If you use `TDD Mode: pragmatic`, include a real `Compensating validation:` field with concrete evidence-file citations. Do not turn `Compensating validation` into its own heading.",
+                "- In `04-test-summary.md` and later audited phases, `Verification Evidence` must be distinct from the Phase 3 implementation evidence.",
+                "- In `Changed Files`, `Worktree Diff Audit`, and `Requirement Completion Status`, account for final diff-owned benchmark files and bootstrapped control-plane files under the worktree, not just the main product source files.",
+                "- Only list files in `Changed Files`, `Worktree Diff Audit`, and `Requirement Completion Status` when they are actually present in the current `git diff --name-only` output. Remove unchanged bootstrap or control-plane files instead of claiming them.",
+                "- Keep benchmark progress notes in `benchmark/agent-log.md` with UTC timestamps when you repair the run.",
+            ]
+        )
+        if missing_files:
+            prompt_lines.extend(["", "Currently missing required artifacts:"])
+            prompt_lines.extend(f"- `{name}`" for name in missing_files)
+        if lint_findings:
+            prompt_lines.extend(["", "Recent controller lint findings to fix:"])
+            prompt_lines.extend(f"- {finding}" for finding in lint_findings)
+        prompt_lines.extend(["", "Finish only after the run folder is complete and strict recursive lint would pass."])
+        return "\n".join(prompt_lines)
+
+    def maybe_repair_recursive_run(
+        self,
+        repo_root: Path,
+        logs_root: Path,
+        runner: RunnerConfig,
+        result: ArmResult,
+    ) -> CommandResult | None:
+        if not self.should_attempt_recursive_repair(result) or not result.run_id:
+            return None
+        total_duration = 0.0
+        last_record: CommandResult | None = None
+        attempt = 1
+        while attempt <= 2 and self.should_attempt_recursive_repair(result):
+            repair_prompt = self.build_recursive_repair_prompt(repo_root, logs_root, result)
+            prompt_name = "recursive-repair-prompt.md" if attempt == 1 else f"recursive-repair-{attempt}-prompt.md"
+            repair_prompt_path = logs_root / prompt_name
+            write_text(repair_prompt_path, repair_prompt)
+            result.log_paths["recursive_repair_prompt"] = self.rel(repair_prompt_path)
+            log_stem = "recursive-repair" if attempt == 1 else f"recursive-repair-{attempt}"
+            repair_record, stdout_log, stderr_log = self.run_model_prompt(
+                repo_root,
+                logs_root,
+                runner_slug=runner.slug,
+                executable=runner.executable,
+                model=runner.model,
+                prompt_text=repair_prompt,
+                log_stem=log_stem,
+                timeout_seconds=min(self.max_seconds, 900 if attempt == 1 else 600),
+            )
+            last_record = repair_record
+            total_duration += repair_record.duration_seconds
+            result.log_paths["recursive_repair_stdout"] = self.rel(stdout_log)
+            result.log_paths["recursive_repair_stderr"] = self.rel(stderr_log)
+            self.evaluate_recursive_run(repo_root, logs_root, result)
+            if self.reconcile_pragmatic_tdd_exception_field(repo_root, logs_root, result):
+                self.evaluate_recursive_run(repo_root, logs_root, result)
+            if self.reconcile_recursive_requirement_changed_files(repo_root, logs_root, result):
+                self.evaluate_recursive_run(repo_root, logs_root, result)
+            attempt += 1
+        result.phase_durations["recursive_repair"] = round(total_duration, 2)
+        if last_record is not None and self.should_attempt_recursive_repair(result):
+            if last_record.timed_out:
+                result.issues.append("Recursive repair pass timed out before closeout artifacts were completed.")
+            elif last_record.returncode != 0:
+                result.issues.append("Recursive repair pass exited non-zero.")
+        return last_record
+
+    def read_recursive_lint_baseline_ref(self, repo_root: Path, result: ArmResult) -> str:
+        if not result.run_id:
+            return ""
+        worktree_doc = repo_root / ".recursive" / "run" / result.run_id / "00-worktree.md"
+        if not worktree_doc.exists():
+            return ""
+        text = worktree_doc.read_text(encoding="utf-8", errors="replace")
+        for label in ("Normalized baseline", "Baseline reference"):
+            match = re.search(rf"(?mi)^-\s*{re.escape(label)}:\s*`?([^`\r\n]+)`?\s*$", text)
+            if match:
+                return match.group(1).strip()
+        return ""
+
+    def materialize_git_archive(self, repo_root: Path, destination_root: Path, git_ref: str) -> bool:
+        archive_path = destination_root.parent / f"baseline-{uuid.uuid4().hex}.tar"
+        try:
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            record = self.run_command(
+                ["git", "archive", "--format=tar", "-o", str(archive_path), git_ref],
+                cwd=repo_root,
+                timeout_seconds=60,
+                check=False,
+            )
+            if record.returncode != 0 or not archive_path.exists():
+                return False
+            destination_root.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(archive_path) as archive:
+                archive.extractall(destination_root)
+            return True
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def commit_lint_snapshot_baseline(self, lint_root: Path) -> str:
+        add_result = self.run_command(["git", "add", "-A", "-f", "--", "."], cwd=lint_root, timeout_seconds=60, check=False)
+        if add_result.returncode != 0:
+            return ""
+        commit_result = self.run_command(
+            [
+                "git",
+                "-c",
+                "user.name=Benchmark Snapshot",
+                "-c",
+                "user.email=benchmark-snapshot@example.com",
+                "commit",
+                "--no-gpg-sign",
+                "-m",
+                "benchmark lint snapshot baseline",
+            ],
+            cwd=lint_root,
+            timeout_seconds=60,
+            check=False,
+        )
+        if commit_result.returncode != 0:
+            return ""
+        head_result = self.run_command(["git", "rev-parse", "HEAD"], cwd=lint_root, timeout_seconds=30, check=False)
+        if head_result.returncode != 0:
+            return ""
+        return head_result.stdout.strip()
+
+    def rewrite_snapshot_diff_basis(self, snapshot_run_root: Path, baseline_commit: str) -> None:
+        worktree_doc = snapshot_run_root / "00-worktree.md"
+        if not worktree_doc.exists():
+            return
+        text = worktree_doc.read_text(encoding="utf-8", errors="replace")
+        replacements = {
+            "Baseline type": "local commit",
+            "Baseline reference": baseline_commit,
+            "Comparison reference": "working-tree",
+            "Normalized baseline": baseline_commit,
+            "Normalized comparison": "working-tree",
+            "Normalized diff command": f"git diff --name-only {baseline_commit}",
+        }
+        for label, value in replacements.items():
+            text = re.sub(
+                rf"(?mi)^([ \t]*-\s*{re.escape(label)}:\s*)(`?)[^`\r\n]+(`?)\s*$",
+                rf"\1`{value}`",
+                text,
+                count=1,
+            )
+        worktree_doc.write_text(text, encoding="utf-8", newline="\n")
+
     def resolve_product_root(self, repo_root: Path, result: ArmResult) -> Path:
         if result.arm_name != "recursive-on" or not result.run_id:
             return repo_root
+        if result.expected_product_root:
+            expected_candidate = repo_root / result.expected_product_root
+            if expected_candidate.exists():
+                return expected_candidate
         worktree_doc = repo_root / ".recursive" / "run" / result.run_id / "00-worktree.md"
         if worktree_doc.exists():
             text = worktree_doc.read_text(encoding="utf-8", errors="replace")
@@ -890,11 +2495,18 @@ class BenchmarkHarness:
         return repo_root
 
     def parse_worktree_location(self, repo_root: Path, text: str) -> tuple[Path | None, str, str]:
-        match = re.search(r"(?im)^\s*-\s*(?:Selected\s+)?Worktree location:\s*(.+?)\s*$", text)
-        if not match:
+        raw_value = ""
+        for pattern in (
+            r"(?im)^\s*-\s*(?:Selected\s+)?Worktree location:\s*(.+?)\s*$",
+            r"(?im)^\s*-\s*Location:\s*(.+?)\s*$",
+            r"(?im)^\s*-\s*Product root:\s*(.+?)\s*$",
+        ):
+            match = re.search(pattern, text)
+            if match:
+                raw_value = match.group(1).strip()
+                break
+        if not raw_value:
             return None, "missing", ""
-
-        raw_value = match.group(1).strip()
         cleaned = raw_value.strip().strip("`").strip().rstrip("/\\")
         if not cleaned:
             return None, "missing", raw_value
@@ -914,9 +2526,391 @@ class BenchmarkHarness:
             return candidate, "repo-root" if same_root else "isolated-worktree", cleaned
         return candidate, "missing-path", cleaned
 
+    def collect_changed_paths(self, repo_root: Path) -> list[str]:
+        status_result = self.run_command(
+            ["git", "status", "--short", "--untracked-files=all"],
+            cwd=repo_root,
+            timeout_seconds=min(self.command_timeout, 120),
+            check=False,
+            allowed_returncodes=(0,),
+        )
+        if status_result.returncode != 0:
+            return []
+        return parse_git_status_paths(status_result.stdout)
+
+    def extract_claimed_product_files(self, run_root: Path, product_root: Path, expected_product_root: str) -> list[str]:
+        claimed: list[str] = []
+        section_field_map: dict[str, dict[str, tuple[str, ...]]] = {
+            "03-implementation-summary.md": {
+                "Requirement Completion Status": ("Changed Files", "Implementation Evidence"),
+            },
+            "04-test-summary.md": {
+                "Requirement Completion Status": ("Changed Files", "Implementation Evidence", "Verification Evidence"),
+            },
+        }
+        plain_sections: dict[str, tuple[str, ...]] = {
+            "03-implementation-summary.md": ("Changes Applied", "Implementation Evidence"),
+            "04-test-summary.md": ("Evidence and Artifacts",),
+        }
+        for file_name in ("03-implementation-summary.md", "04-test-summary.md"):
+            artifact_path = run_root / file_name
+            if not artifact_path.exists():
+                continue
+            artifact_text = artifact_path.read_text(encoding="utf-8", errors="replace")
+            for heading in plain_sections.get(file_name, ()):
+                section_body = self.get_heading_body(artifact_text, heading)
+                for candidate in self.extract_claimed_paths_from_text(section_body, product_root, expected_product_root):
+                    if self.is_product_path(candidate):
+                        claimed.append(candidate)
+            for heading, field_names in section_field_map.get(file_name, {}).items():
+                section_body = self.get_heading_body(artifact_text, heading)
+                for entry in self.parse_pipe_entry_fields(section_body):
+                    for field_name in field_names:
+                        for candidate in self.extract_claimed_paths_from_text(
+                            entry.get(field_name, ""),
+                            product_root,
+                            expected_product_root,
+                        ):
+                            if self.is_product_path(candidate):
+                                claimed.append(candidate)
+        return dedupe_preserve_order(claimed)
+
+    def evaluate_recursive_delivery(self, repo_root: Path, product_root: Path, result: ArmResult) -> None:
+        if result.arm_name != "recursive-on":
+            result.recursive_delivery_status = "n/a"
+            return
+
+        expected_root = repo_root / result.expected_product_root if result.expected_product_root else None
+        if expected_root is None:
+            result.recursive_delivery_status = "missing-expected-product-root"
+            self.add_issue(result, "Recursive benchmark metadata did not record an expected product worktree.")
+            return
+        if not expected_root.exists():
+            result.recursive_delivery_status = "missing-expected-product-root"
+            self.add_issue(result, "Recursive benchmark expected product worktree was not created.")
+            return
+
+        try:
+            resolved_product_matches_expected = product_root.resolve() == expected_root.resolve()
+        except OSError:
+            resolved_product_matches_expected = False
+        if not resolved_product_matches_expected:
+            result.recursive_delivery_status = "unexpected-product-root"
+            self.add_issue(
+                result,
+                "Recursive benchmark evaluation resolved a different product root than the expected worktree.",
+            )
+            return
+
+        run_root = repo_root / ".recursive" / "run" / result.run_id
+        result.recursive_claimed_files = (
+            self.extract_claimed_product_files(run_root, product_root, result.expected_product_root)
+            if run_root.exists()
+            else []
+        )
+        result.recursive_product_change_paths = [
+            path for path in self.collect_changed_paths(product_root) if self.is_product_path(path)
+        ]
+        result.recursive_root_product_drift = [
+            path for path in self.collect_changed_paths(repo_root) if self.is_product_path(path)
+        ]
+        changed_set = set(result.recursive_product_change_paths)
+        result.recursive_missing_claimed_files = [
+            path for path in result.recursive_claimed_files if path not in changed_set
+        ]
+
+        if not result.recursive_product_change_paths:
+            if result.recursive_root_product_drift:
+                result.recursive_delivery_status = "wrong-root-edits"
+                self.add_issue(
+                    result,
+                    "Recursive benchmark run changed product files in the control-plane repo root while the declared worktree remained at baseline.",
+                )
+            else:
+                result.recursive_delivery_status = "baseline-worktree"
+                self.add_issue(result, "Recursive benchmark run left the declared product worktree at baseline.")
+            return
+
+        if result.recursive_missing_claimed_files:
+            result.recursive_delivery_status = "claimed-files-missing-in-worktree"
+            self.add_issue(
+                result,
+                "Recursive run artifacts claim product file changes missing from the declared worktree: "
+                + ", ".join(result.recursive_missing_claimed_files)
+                + ".",
+            )
+            return
+
+        if result.recursive_root_product_drift:
+            result.recursive_delivery_status = "split-delivery"
+            self.add_issue(
+                result,
+                "Recursive benchmark run split product edits between the declared worktree and the control-plane repo root.",
+            )
+            return
+
+        result.recursive_delivery_status = "ok"
+
+    def should_snapshot_rust_evaluation_root(self, repo_root: Path, product_root: Path, result: ArmResult) -> bool:
+        if not self.uses_rust_wasm_toolchain() or result.arm_name != "recursive-on":
+            return False
+        if not product_root.exists() or not (repo_root / "Cargo.toml").exists():
+            return False
+        try:
+            repo_resolved = repo_root.resolve()
+            product_resolved = product_root.resolve()
+        except OSError:
+            return False
+        if product_resolved == repo_resolved:
+            return False
+        try:
+            product_resolved.relative_to(repo_resolved)
+        except ValueError:
+            return False
+        return True
+
+    def prepare_evaluation_root(self, repo_root: Path, product_root: Path, logs_root: Path, result: ArmResult) -> Path:
+        if not self.should_snapshot_rust_evaluation_root(repo_root, product_root, result):
+            return product_root
+        evaluation_root = logs_root / "evaluation-root"
+        if evaluation_root.exists():
+            remove_tree(evaluation_root)
+        ignore = shutil.ignore_patterns(".git", "target", "dist", ".cargo-target-dir", ".playwright-mcp", "__pycache__")
+        shutil.copytree(product_root, evaluation_root, ignore=ignore)
+        result.log_paths["evaluation_root"] = self.rel(evaluation_root)
+        return evaluation_root
+
+    def should_snapshot_recursive_lint_root(self, repo_root: Path, product_root: Path, result: ArmResult) -> bool:
+        if result.arm_name != "recursive-on":
+            return False
+        if not product_root.exists():
+            return False
+        try:
+            repo_resolved = repo_root.resolve()
+            product_resolved = product_root.resolve()
+        except OSError:
+            return False
+        if product_resolved == repo_resolved:
+            return False
+        try:
+            product_resolved.relative_to(repo_resolved)
+        except ValueError:
+            return False
+        return True
+
+    def prepare_recursive_lint_root(self, repo_root: Path, product_root: Path, logs_root: Path, result: ArmResult) -> Path:
+        if not self.should_snapshot_recursive_lint_root(repo_root, product_root, result):
+            return repo_root
+        lint_root = logs_root / "recursive-lint-root"
+        if lint_root.exists():
+            remove_tree(lint_root)
+        root_ignore = shutil.ignore_patterns(".worktrees", ".playwright-mcp", ".cargo-target-dir", "__pycache__")
+        shutil.copytree(repo_root, lint_root, ignore=root_ignore)
+        try:
+            relative_product_root = product_root.resolve().relative_to(repo_root.resolve())
+        except (OSError, ValueError):
+            result.log_paths["recursive_lint_root"] = self.rel(lint_root)
+            return lint_root
+        destination_product_root = lint_root / relative_product_root
+        product_runtime_ignore = {".git", "target", "dist", ".cargo-target-dir", ".playwright-mcp", "__pycache__", ".recursive"}
+
+        def product_ignore(directory: str, names: list[str]) -> set[str]:
+            ignored = {name for name in names if name in product_runtime_ignore}
+            try:
+                relative_directory = Path(directory).resolve().relative_to(product_root.resolve())
+            except OSError:
+                relative_directory = Path()
+            except ValueError:
+                relative_directory = Path()
+            if relative_directory == Path("benchmark"):
+                for name in names:
+                    if name in {"agent-log.md", "screenshots"}:
+                        continue
+                    ignored.add(name)
+            return ignored
+
+        baseline_ref = self.read_recursive_lint_baseline_ref(repo_root, result)
+        baseline_seeded = False
+        if baseline_ref:
+            baseline_seeded = self.materialize_git_archive(repo_root, destination_product_root, baseline_ref)
+            if baseline_seeded:
+                baseline_commit = self.commit_lint_snapshot_baseline(lint_root)
+                if baseline_commit:
+                    snapshot_run_root = lint_root / ".recursive" / "run" / result.run_id
+                    self.rewrite_snapshot_diff_basis(snapshot_run_root, baseline_commit)
+                else:
+                    baseline_seeded = False
+                    remove_tree(destination_product_root)
+        destination_product_root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(product_root, destination_product_root, ignore=product_ignore, dirs_exist_ok=baseline_seeded)
+        # The benchmark repos commonly ignore `.worktrees/`, so register the copied worktree
+        # path as intent-to-add inside the disposable lint snapshot so `git diff` can see it.
+        self.run_command(
+            ["git", "add", "-N", "-f", "--", str(relative_product_root).replace("\\", "/")],
+            cwd=lint_root,
+            timeout_seconds=30,
+        )
+        result.log_paths["recursive_lint_root"] = self.rel(lint_root)
+        return lint_root
+
     @staticmethod
     def has_heading(content: str, heading_text: str) -> bool:
         return bool(re.search(rf"(?m)^[ \t]*##\s+{re.escape(heading_text)}\s*$", content))
+
+    @staticmethod
+    def get_heading_body(content: str, heading_text: str) -> str:
+        match = re.search(
+            rf"(?ms)^[ \t]*##\s+{re.escape(heading_text)}\s*$\n?(.*?)(?=^[ \t]*##\s+|\Z)",
+            content,
+        )
+        return match.group(1).strip() if match else ""
+
+    @staticmethod
+    def parse_pipe_entry_fields(section_body: str) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
+        if not section_body:
+            return entries
+        for raw_line in section_body.splitlines():
+            line = raw_line.strip()
+            if not line.startswith(("-", "*")):
+                continue
+            body = line[1:].strip()
+            parts = [part.strip() for part in body.split("|") if part.strip()]
+            if len(parts) < 2:
+                continue
+            fields: dict[str, str] = {"Requirement ID": parts[0].strip("`")}
+            for part in parts[1:]:
+                if ":" not in part:
+                    continue
+                key, value = part.split(":", 1)
+                fields[key.strip()] = value.strip().strip("`")
+            entries.append(fields)
+        return entries
+
+    @staticmethod
+    def normalize_changed_files_field(field_value: str, diff_paths: set[str]) -> tuple[str, bool]:
+        cited_paths = re.findall(r"`([^`\r\n]+)`", field_value)
+        if not cited_paths:
+            return field_value, False
+        kept_paths = [path for path in cited_paths if normalize_benchmark_path(path) in diff_paths]
+        if not kept_paths or kept_paths == cited_paths:
+            return field_value, False
+        return ", ".join(f"`{path}`" for path in kept_paths), True
+
+    def trim_requirement_changed_files_to_diff(self, artifact_path: Path, diff_paths: set[str]) -> bool:
+        if not artifact_path.exists():
+            return False
+        original = artifact_path.read_text(encoding="utf-8", errors="replace")
+        lines = original.splitlines()
+        updated_lines: list[str] = []
+        in_requirement_status = False
+        changed = False
+        for line in lines:
+            stripped = line.strip()
+            if re.match(r"^[ \t]*##\s+Requirement Completion Status\s*$", line):
+                in_requirement_status = True
+                updated_lines.append(line)
+                continue
+            if in_requirement_status and re.match(r"^[ \t]*##\s+", line):
+                in_requirement_status = False
+            if in_requirement_status and stripped.startswith("- ") and "Changed Files:" in line:
+                indent = line[: len(line) - len(line.lstrip())]
+                body = stripped[2:]
+                parts = [part.strip() for part in body.split(" | ")]
+                for index, part in enumerate(parts):
+                    if not part.startswith("Changed Files:"):
+                        continue
+                    value = part[len("Changed Files:") :].strip()
+                    normalized_value, part_changed = self.normalize_changed_files_field(value, diff_paths)
+                    if part_changed:
+                        parts[index] = f"Changed Files: {normalized_value}"
+                        changed = True
+                line = indent + "- " + " | ".join(parts)
+            updated_lines.append(line)
+        if not changed:
+            return False
+        artifact_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8", newline="\n")
+        return True
+
+    def reconcile_recursive_requirement_changed_files(self, repo_root: Path, logs_root: Path, result: ArmResult) -> bool:
+        if result.arm_name != "recursive-on" or not result.run_id or result.recursive_workflow_status != "lint-failed":
+            return False
+        lint_findings = self.collect_recursive_lint_findings(logs_root / "recursive-lint.log")
+        if not any("Changed Files are outside the current diff scope" in finding for finding in lint_findings):
+            return False
+        lint_root = logs_root / "recursive-lint-root"
+        run_root = repo_root / ".recursive" / "run" / result.run_id
+        if not lint_root.exists() or not run_root.exists():
+            return False
+        diff_result = self.run_command(
+            ["git", "diff", "--name-only"],
+            cwd=lint_root,
+            timeout_seconds=30,
+            check=False,
+        )
+        if diff_result.returncode != 0:
+            return False
+        diff_paths = {
+            normalize_benchmark_path(raw_line.strip())
+            for raw_line in diff_result.stdout.splitlines()
+            if raw_line.strip()
+        }
+        if not diff_paths:
+            return False
+        changed = False
+        for artifact_name in (
+            "03-implementation-summary.md",
+            "04-test-summary.md",
+            "06-decisions-update.md",
+            "07-state-update.md",
+            "08-memory-impact.md",
+        ):
+            if self.trim_requirement_changed_files_to_diff(run_root / artifact_name, diff_paths):
+                changed = True
+        return changed
+
+    def normalize_claimed_product_path(self, raw_value: str, product_root: Path, expected_product_root: str) -> str:
+        candidate = raw_value.strip().strip("`").strip()
+        if not candidate:
+            return ""
+        try:
+            path_candidate = Path(candidate)
+        except OSError:
+            path_candidate = None
+        if path_candidate is not None and path_candidate.is_absolute():
+            try:
+                return normalize_benchmark_path(str(path_candidate.resolve().relative_to(product_root.resolve())))
+            except (OSError, ValueError):
+                pass
+        normalized = normalize_benchmark_path(candidate)
+        product_prefix = normalize_benchmark_path(expected_product_root)
+        if product_prefix and normalized.startswith(product_prefix + "/"):
+            return normalized[len(product_prefix) + 1 :]
+        return normalized
+
+    def extract_claimed_paths_from_text(self, text: str, product_root: Path, expected_product_root: str) -> list[str]:
+        if not text:
+            return []
+        raw_candidates: list[str] = []
+        raw_candidates.extend(re.findall(r"`([^`\r\n]+)`", text))
+        raw_candidates.extend(re.findall(r"(?<![\w.-])(?:[.\w-]+[\\/])+[.\w-]+", text))
+        for file_name in sorted(EXPLICIT_PRODUCT_FILE_NAMES):
+            if re.search(rf"(?<![\w/\\.-]){re.escape(file_name)}(?![\w/\\.-])", text):
+                raw_candidates.append(file_name)
+        normalized_candidates: list[str] = []
+        for raw_candidate in raw_candidates:
+            raw_text = raw_candidate.strip().strip("`").strip()
+            normalized_raw = normalize_benchmark_path(raw_text)
+            if (
+                "/" not in normalized_raw
+                and "\\" not in raw_text
+                and Path(normalized_raw).name not in EXPLICIT_PRODUCT_FILE_NAMES
+            ):
+                continue
+            candidate = self.normalize_claimed_product_path(raw_candidate, product_root, expected_product_root)
+            if candidate:
+                normalized_candidates.append(candidate)
+        return dedupe_preserve_order(normalized_candidates)
 
     @staticmethod
     def read_workflow_version(content: str) -> str:
@@ -987,31 +2981,36 @@ class BenchmarkHarness:
         return pattern.sub("", config_text)
 
     def evaluate_repo(self, repo_root: Path, product_root: Path, logs_root: Path, result: ArmResult) -> None:
+        evaluation_root = self.prepare_evaluation_root(repo_root, product_root, logs_root, result)
+        build_command = self.build_command()
         build_result = self.run_command(
-            [self.npm_exe or "npm", "run", "build"],
-            cwd=product_root,
+            build_command,
+            cwd=evaluation_root,
             timeout_seconds=self.command_timeout,
+            env=self.rust_wasm_env(),
             check=False,
         )
-        self.write_command_log(logs_root / "build.log", "npm run build", build_result)
+        self.write_command_log(logs_root / "build.log", command_string(build_command), build_result)
         result.log_paths["build"] = self.rel(logs_root / "build.log")
         result.phase_durations["build"] = round(build_result.duration_seconds, 2)
         result.build_success = build_result.returncode == 0 and not build_result.timed_out
         if not result.build_success:
-            result.issues.append("Build failed.")
+            self.add_issue(result, "Build failed.")
 
+        test_command = self.test_command()
         test_result = self.run_command(
-            [self.npm_exe or "npm", "run", "test"],
-            cwd=product_root,
+            test_command,
+            cwd=evaluation_root,
             timeout_seconds=self.command_timeout,
+            env=self.rust_wasm_env(),
             check=False,
         )
-        self.write_command_log(logs_root / "test.log", "npm run test", test_result)
+        self.write_command_log(logs_root / "test.log", command_string(test_command), test_result)
         result.log_paths["test"] = self.rel(logs_root / "test.log")
         result.phase_durations["test"] = round(test_result.duration_seconds, 2)
         result.test_success = test_result.returncode == 0 and not test_result.timed_out
         if not result.test_success:
-            result.issues.append("Tests failed.")
+            self.add_issue(result, "Tests failed.")
 
         preview_port = detect_port()
         preview_url = f"http://{DEFAULT_PREVIEW_HOST}:{preview_port}/"
@@ -1020,16 +3019,19 @@ class BenchmarkHarness:
         preview_process: subprocess.Popen | None = None
         preview_start = time.perf_counter()
         cleanup_note = ""
+        preview_command = self.preview_command(preview_port)
         try:
+            preview_env = os.environ.copy()
+            preview_env.update(self.rust_wasm_env())
             preview_process = subprocess.Popen(
-                [self.npm_exe or "npm", "run", "preview", "--", "--host", DEFAULT_PREVIEW_HOST, "--port", str(preview_port)],
-                cwd=str(product_root),
+                preview_command,
+                cwd=str(evaluation_root),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                env=os.environ.copy(),
+                env=preview_env,
             )
             deadline = time.time() + self.preview_timeout
             while time.time() < deadline:
@@ -1071,7 +3073,7 @@ class BenchmarkHarness:
         if preview_started:
             result.log_paths["preview_url"] = preview_url
         else:
-            result.issues.append("Preview server did not become reachable.")
+            self.add_issue(result, "Preview server did not become reachable.")
 
         result.screenshot_paths = self.discover_screenshots(repo_root, product_root, logs_root)
         result.timestamp_evidence = self.collect_timestamp_evidence(
@@ -1085,11 +3087,13 @@ class BenchmarkHarness:
         if hint_log_path is not None:
             result.log_paths["hints"] = self.rel(hint_log_path)
         result.hint_count = self.count_hint_events(hint_log_path)
-        self.evaluate_recursive_run(repo_root, result)
+        self.evaluate_recursive_run(repo_root, logs_root, result)
+        self.evaluate_recursive_delivery(repo_root, product_root, result)
         self.score_repo(repo_root, product_root, result)
 
     def score_repo(self, repo_root: Path, product_root: Path, result: ArmResult) -> None:
         breakdown: dict[str, float] = {}
+        breakdown_max: dict[str, float] = {}
         score_max = 0.0
 
         def add_score(
@@ -1104,6 +3108,7 @@ class BenchmarkHarness:
             score_max += maximum
             bounded = max(0.0, min(maximum, awarded))
             breakdown[label] = bounded
+            breakdown_max[label] = maximum
             if bounded == 0 and zero_issue:
                 result.issues.append(zero_issue)
             elif 0 < bounded < maximum and partial_issue:
@@ -1131,6 +3136,8 @@ class BenchmarkHarness:
         source_text = self.read_repo_source(product_root)
         if self.scenario_name == "release-readiness-dashboard":
             self.score_release_dashboard_repo(source_text, result, add_score)
+        elif self.scenario_name == "scientific-calculator-rust":
+            self.score_scientific_calculator_repo(source_text, result, add_score)
         else:
             self.score_planner_repo(source_text, result, add_score)
 
@@ -1141,6 +3148,11 @@ class BenchmarkHarness:
             )
 
         result.score_breakdown = breakdown
+        result.score_breakdown_max = breakdown_max
+        result.judge_adjusted_score_breakdown = {}
+        result.judge_adjusted_score = None
+        result.judge_entry_adjustments = {}
+        result.judge_entry_adjustment_reasons = {}
         result.score_max = score_max
         result.score = max(0.0, sum(breakdown.values()) - result.hint_penalty)
         self.update_combined_benchmark_score(result)
@@ -1314,10 +3326,159 @@ class BenchmarkHarness:
             zero_issue="Empty/error state heuristic was not detected.",
         )
 
+    def score_scientific_calculator_repo(self, source_text: str, result: ArmResult, add_score) -> None:
+        dual_display = ("expression" in source_text or "tape" in source_text) and (
+            "display" in source_text or "result" in source_text
+        )
+        editing_controls = any(
+            marker in source_text
+            for marker in (
+                "backspace",
+                "clear entry",
+                "clear_entry",
+                "clearentry",
+                "clear all",
+                "clear_all",
+                "clearall",
+                "toggle_sign",
+                "sign",
+                '"ce"',
+                '"ac"',
+                "⌫",
+            )
+        )
+        add_score(
+            "dual_display_editing",
+            10 if dual_display and editing_controls else 5 if dual_display else 0,
+            10,
+            zero_issue="Dual-display or expression-editing heuristics were not detected.",
+            partial_issue="A calculator display was detected, but expression-editing controls appear incomplete.",
+        )
+        parser_precedence = (
+            "parenth" in source_text
+            and any(
+                marker in source_text
+                for marker in (
+                    "precedence",
+                    "precedence climbing",
+                    "shunting",
+                    "operator_stack",
+                    "parse_expression",
+                    "recursive descent",
+                    "parse_add_sub",
+                    "parse_mul_div",
+                    "parse_pow",
+                    "parse_power",
+                )
+            )
+        ) or ("^" in source_text and any(marker in source_text for marker in ("operator", "parse_pow", "parse_power")))
+        add_score(
+            "parser_precedence",
+            15 if parser_precedence else 0,
+            15,
+            zero_issue="Expression parser or operator-precedence heuristics were not detected.",
+        )
+        scientific_markers = sum(
+            marker in source_text for marker in ("sin", "cos", "tan", "sqrt", "log", "ln", "pow", "pi", " e ")
+        )
+        add_score(
+            "scientific_functions",
+            15 if scientific_markers >= 6 else 8 if scientific_markers >= 4 else 0,
+            15,
+            zero_issue="Scientific-function heuristics were not detected.",
+            partial_issue="Some scientific functions were detected, but the calculator surface still appears incomplete.",
+        )
+        angle_mode = (
+            "degree" in source_text and "radian" in source_text
+        ) or (
+            "anglemode" in source_text
+            and any(marker in source_text for marker in ("deg", "degree"))
+            and any(marker in source_text for marker in ("rad", "radian"))
+        )
+        add_score(
+            "angle_mode",
+            10 if angle_mode else 0,
+            10,
+            zero_issue="Degree/radian mode heuristics were not detected.",
+        )
+        memory_history = "memory" in source_text and "history" in source_text
+        add_score(
+            "memory_history",
+            10 if memory_history else 5 if ("memory" in source_text or "history" in source_text) else 0,
+            10,
+            zero_issue="Memory-register or history heuristics were not detected.",
+            partial_issue="Memory or history support was partially detected, but one surface appears incomplete.",
+        )
+        persistence = any(
+            marker in source_text
+            for marker in ("local_storage", "localstorage", "gloo_storage", "storage::", "set_item(", "get_item(")
+        )
+        add_score(
+            "persistence",
+            10 if persistence else 0,
+            10,
+            zero_issue="Local persistence heuristics were not detected.",
+        )
+        keyboard_support = any(
+            marker in source_text for marker in ("keyboardevent", "keydown", "onkeydown", "enter", "backspace", "escape")
+        )
+        add_score(
+            "keyboard_support",
+            5 if keyboard_support else 0,
+            5,
+            zero_issue="Keyboard-input heuristics were not detected.",
+        )
+        error_handling = any(
+            marker in source_text
+            for marker in (
+                "divide by zero",
+                "division by zero",
+                "domain",
+                "error",
+                "invalid expression",
+                "sqrt of negative",
+                "non-positive",
+            )
+        )
+        add_score(
+            "error_handling",
+            5 if error_handling else 0,
+            5,
+            zero_issue="Visible calculator error-handling heuristics were not detected.",
+        )
+        display_formatting = any(
+            marker in source_text
+            for marker in ("scientific notation", "format_result", "format_val", "trim_trailing", "trim_end_matches", "{:.12}")
+        )
+        add_score(
+            "display_formatting",
+            5 if display_formatting else 0,
+            5,
+            zero_issue="Result-formatting heuristics were not detected.",
+        )
+        responsive_ui = (
+            ("@media" in source_text and "grid" in source_text)
+            or "minmax" in source_text
+            or ("grid-template-columns" in source_text and "max-width" in source_text)
+            or ("display: grid" in source_text and "max-width" in source_text)
+        )
+        add_score(
+            "responsive_ui",
+            5 if responsive_ui else 0,
+            5,
+            zero_issue="Responsive scientific-calculator UI heuristics were not detected.",
+        )
+
     def read_repo_source(self, repo_root: Path) -> str:
         parts: list[str] = []
-        for path in sorted((repo_root / "src").rglob("*")):
-            if path.suffix.lower() not in {".ts", ".tsx", ".css", ".json"}:
+        allowed_extensions = self.source_extensions()
+        for path in sorted(repo_root.rglob("*")):
+            if not path.is_file():
+                continue
+            relative_parts = path.relative_to(repo_root).parts
+            if any(part in IGNORED_SOURCE_DIRS for part in relative_parts[:-1]):
+                continue
+            if path.suffix.lower() not in allowed_extensions:
                 continue
             parts.append(path.read_text(encoding="utf-8", errors="replace").lower())
         return "\n".join(parts)
@@ -1455,6 +3616,7 @@ class BenchmarkHarness:
         judge_model = payload.get("judge_model")
         summary = payload.get("summary")
         notes = payload.get("notes")
+        entry_adjustments = payload.get("entry_adjustments")
         if isinstance(score, (int, float)):
             result.judge_score = float(score)
         if isinstance(score_max, (int, float)):
@@ -1467,7 +3629,91 @@ class BenchmarkHarness:
             result.judge_summary = summary.strip()
         if isinstance(notes, list):
             result.judge_notes = [str(note).strip() for note in notes if str(note).strip()]
+        parsed_adjustments: dict[str, float] = {}
+        parsed_adjustment_reasons: dict[str, str] = {}
+        if isinstance(entry_adjustments, dict):
+            for raw_key, raw_value in entry_adjustments.items():
+                key = str(raw_key).strip()
+                if not key:
+                    continue
+                score_value: float | None = None
+                reason = ""
+                if isinstance(raw_value, (int, float)):
+                    score_value = float(raw_value)
+                elif isinstance(raw_value, dict):
+                    candidate_score = raw_value.get("score")
+                    if isinstance(candidate_score, (int, float)):
+                        score_value = float(candidate_score)
+                    candidate_reason = raw_value.get("reason")
+                    if isinstance(candidate_reason, str):
+                        reason = candidate_reason.strip()
+                if score_value is None:
+                    continue
+                parsed_adjustments[key] = score_value
+                if reason:
+                    parsed_adjustment_reasons[key] = reason
+        result.judge_entry_adjustments = parsed_adjustments
+        result.judge_entry_adjustment_reasons = parsed_adjustment_reasons
+        self.apply_judge_entry_adjustments(result)
         result.log_paths["judge_metric"] = self.rel(candidate)
+
+    def apply_judge_entry_adjustments(self, result: ArmResult) -> None:
+        result.judge_adjusted_score_breakdown = {}
+        result.judge_adjusted_score = None
+        if not result.judge_entry_adjustments or not result.score_breakdown:
+            return
+
+        adjusted = dict(result.score_breakdown)
+        applied = False
+        unknown_keys: list[str] = []
+        for key, requested_score in result.judge_entry_adjustments.items():
+            if key not in adjusted:
+                unknown_keys.append(key)
+                continue
+            maximum = result.score_breakdown_max.get(key, max(adjusted[key], requested_score, 0.0))
+            bounded = max(0.0, min(maximum, requested_score))
+            if bounded == adjusted[key]:
+                continue
+            adjusted[key] = bounded
+            applied = True
+
+        if unknown_keys:
+            result.issues.append(
+                "Judge entry adjustments referenced unknown score keys: "
+                + ", ".join(f"`{key}`" for key in sorted(unknown_keys))
+                + "."
+            )
+        if not applied:
+            return
+
+        result.judge_adjusted_score_breakdown = adjusted
+        result.judge_adjusted_score = max(0.0, sum(adjusted.values()) - result.hint_penalty)
+
+    def effective_score_breakdown(self, result: ArmResult) -> dict[str, float]:
+        return result.judge_adjusted_score_breakdown or result.score_breakdown
+
+    def normalized_score(self, value: float | None, maximum: float) -> float | None:
+        if value is None or maximum <= 0:
+            return None
+        return round((value / maximum) * DEFAULT_BENCHMARK_SCORE_MAX, 1)
+
+    def format_entry_score(self, result: ArmResult, key: str) -> str:
+        adjusted = self.effective_score_breakdown(result).get(key, 0.0)
+        raw = result.score_breakdown.get(key)
+        if raw is None or adjusted == raw:
+            return f"`{format_score(adjusted)}`"
+        return f"`{format_score(adjusted)} (raw {format_score(raw)})`"
+
+    def describe_entry_adjustment(self, result: ArmResult, key: str, arm_label: str) -> str:
+        if key not in result.judge_adjusted_score_breakdown or key not in result.score_breakdown:
+            return ""
+        adjusted = result.judge_adjusted_score_breakdown[key]
+        raw = result.score_breakdown[key]
+        if adjusted == raw:
+            return ""
+        reason = result.judge_entry_adjustment_reasons.get(key, "")
+        detail = f"{arm_label} adjusted {format_score(raw)} -> {format_score(adjusted)}"
+        return f"{detail} ({reason})" if reason else detail
 
     def build_judge_candidates(self, benchmark_runner: RunnerConfig) -> list[RunnerConfig]:
         candidates: list[RunnerConfig] = []
@@ -1518,6 +3764,8 @@ class BenchmarkHarness:
         recursive_context = ""
         if result.arm_name == "recursive-on":
             missing = [name for name, present in result.recursive_artifact_status.items() if not present] or ["none"]
+            root_drift = ", ".join(result.recursive_root_product_drift) if result.recursive_root_product_drift else "none"
+            missing_claimed = ", ".join(result.recursive_missing_claimed_files) if result.recursive_missing_claimed_files else "none"
             recursive_context = (
                 "\nRecursive workflow context:\n"
                 f"- Recursive workflow status: {result.recursive_workflow_status}\n"
@@ -1525,9 +3773,23 @@ class BenchmarkHarness:
                 f"- Worktree location: {result.recursive_worktree_location or 'n/a'}\n"
                 f"- Run id: {result.run_id or 'n/a'}\n"
                 f"- Run root: {result.recursive_run_root or 'n/a'}\n"
+                f"- Expected product root: {result.expected_product_root or 'n/a'}\n"
                 f"- Product root: {product_root_display}\n"
+                f"- Delivery integrity status: {result.recursive_delivery_status}\n"
+                f"- Claimed product files: {', '.join(result.recursive_claimed_files) if result.recursive_claimed_files else 'none'}\n"
+                f"- Changed product files in product root: {', '.join(result.recursive_product_change_paths) if result.recursive_product_change_paths else 'none'}\n"
+                f"- Root-only product drift: {root_drift}\n"
+                f"- Claimed files missing in worktree: {missing_claimed}\n"
                 f"- Missing recursive artifacts: {', '.join(missing)}\n"
             )
+            if product_root_display != ".":
+                recursive_context += (
+                    f"- Authoritative benchmark progress log: {product_benchmark_path}agent-log.md\n"
+                    "- Judge note: when the product root differs from the repo root, treat the product-root "
+                    "`benchmark/agent-log.md` as the primary timestamped progress log. The repo-root "
+                    "`benchmark/agent-log.md` may contain controller metadata only and should not be penalized on "
+                    "that basis alone.\n"
+                )
 
         brief_text = (
             "You are the mandatory controller-side code-review judge for a recursive-mode benchmark.\n"
@@ -1536,6 +3798,9 @@ class BenchmarkHarness:
             "If benchmark/judge-metric.json already exists, overwrite it.\n"
             "Use a 0-10 overall score where 10 means the implementation is highly faithful, robust, and benchmark-complete.\n"
             "Apply the evidence-form rule: if something is implemented but the required evidence form is incomplete, deduct half credit for that portion.\n"
+            "If the raw heuristic entry breakdown overstates or understates the implementation, correct the specific entry scores in "
+            "`entry_adjustments` using the exact entry keys listed below. Use final corrected scores, not deltas.\n"
+            "Only adjust entry keys when your review found a concrete mismatch between the raw heuristic and the actual delivered outcome.\n"
             "Prefer concrete issues over generic comments. Return a short confirmation after writing the file.\n\n"
             "Write benchmark/judge-metric.json with this exact JSON shape:\n"
             "{\n"
@@ -1544,7 +3809,10 @@ class BenchmarkHarness:
             '  "judge_runner": "<runner name>",\n'
             '  "judge_model": "<model name>",\n'
             '  "summary": "<1-2 sentence summary>",\n'
-            '  "notes": ["<concrete finding>", "<concrete finding>"]\n'
+            '  "notes": ["<concrete finding>", "<concrete finding>"],\n'
+            '  "entry_adjustments": {\n'
+            '    "<entry key>": { "score": 0, "reason": "<short concrete reason>" }\n'
+            "  }\n"
             "}\n\n"
             f"Scenario: {self.scenario_name}\n"
             f"Scenario title: {self.scenario_title}\n"
@@ -1559,6 +3827,16 @@ class BenchmarkHarness:
             f"Heuristic score: {format_score(result.score)}/{format_score(result.score_max)}\n"
             f"Known issues so far: {', '.join(result.issues) if result.issues else 'none'}\n"
             f"{recursive_context}\n"
+            "Current heuristic entry breakdown (use these exact keys if you correct any entry):\n"
+            + (
+                "".join(
+                    f"- {key}: {format_score(value)}/{format_score(result.score_breakdown_max.get(key, value))}\n"
+                    for key, value in sorted(result.score_breakdown.items())
+                )
+                if result.score_breakdown
+                else "- none\n"
+            )
+            + "\n"
             "Repository paths to inspect:\n"
             f"- {product_src_path}\n"
             f"- {product_benchmark_path}\n"
@@ -1581,6 +3859,10 @@ class BenchmarkHarness:
         result.judge_model_name = ""
         result.judge_summary = ""
         result.judge_notes = []
+        result.judge_entry_adjustments = {}
+        result.judge_entry_adjustment_reasons = {}
+        result.judge_adjusted_score_breakdown = {}
+        result.judge_adjusted_score = None
 
     def run_judge_review(
         self,
@@ -1640,11 +3922,12 @@ class BenchmarkHarness:
         result.issues.append("Automatic code-review judge did not produce a structured metric.")
         self.update_combined_benchmark_score(result)
 
-    def evaluate_recursive_run(self, repo_root: Path, result: ArmResult) -> None:
+    def evaluate_recursive_run(self, repo_root: Path, logs_root: Path, result: ArmResult) -> None:
         if result.arm_name != "recursive-on":
             result.recursive_workflow_status = "n/a"
             result.recursive_isolation_status = "n/a"
             return
+        self.clear_recursive_evaluation_issues(result)
         if not result.run_id:
             result.recursive_workflow_status = "missing-run-id"
             result.recursive_isolation_status = "missing-run-id"
@@ -1668,6 +3951,34 @@ class BenchmarkHarness:
             if not file_exists:
                 missing_files.append(file_name)
         result.recursive_artifact_status = artifact_status
+
+        product_root_for_lint = self.resolve_product_root(repo_root, result)
+        lint_repo_root = self.prepare_recursive_lint_root(repo_root, product_root_for_lint, logs_root, result)
+        lint_result = self.run_command(
+            [
+                self.python_exe,
+                str(self.script_dir / "lint-recursive-run.py"),
+                "--repo-root",
+                str(lint_repo_root),
+                "--run-id",
+                result.run_id,
+                "--strict",
+            ],
+            cwd=lint_repo_root,
+            timeout_seconds=min(self.command_timeout, 300),
+            check=False,
+        )
+        self.write_command_log(logs_root / "recursive-lint.log", "recursive lint", lint_result)
+        result.log_paths["recursive_lint"] = self.rel(logs_root / "recursive-lint.log")
+        result.phase_durations["recursive_lint"] = round(lint_result.duration_seconds, 2)
+        lint_failed = lint_result.returncode != 0 or lint_result.timed_out
+        if lint_failed and self.lint_has_only_optional_missing_artifact_warnings(logs_root / "recursive-lint.log"):
+            lint_failed = False
+        if lint_result.timed_out:
+            result.issues.append("Recursive run lint timed out before benchmark closeout could be confirmed.")
+        elif lint_result.returncode != 0:
+            if lint_failed:
+                result.issues.append("Recursive run artifacts failed controller-side lint.")
 
         if missing_files:
             result.recursive_workflow_status = "incomplete"
@@ -1702,6 +4013,8 @@ class BenchmarkHarness:
             result.issues.append(
                 "Recursive Phase 1/2 guardrails missing or outdated: " + ", ".join(missing_guardrails) + "."
             )
+        elif lint_failed:
+            result.recursive_workflow_status = "lint-failed"
 
         worktree_doc = run_root / "00-worktree.md"
         worktree_text = worktree_doc.read_text(encoding="utf-8", errors="replace")
@@ -1716,6 +4029,7 @@ class BenchmarkHarness:
     def append_arm_comparisons(self, summary_lines: list[str]) -> None:
         grouped: dict[str, dict[str, ArmResult]] = {}
         for result in self.results:
+            self.normalize_result_lists(result)
             grouped.setdefault(result.runner_slug, {})[result.arm_name] = result
 
         sections_added = False
@@ -1745,6 +4059,7 @@ class BenchmarkHarness:
                     f"| Recursive workflow profile | `{off.recursive_workflow_profile}` | `{on.recursive_workflow_profile}` | n/a |",
                     f"| Phase 1/2 guardrails | `{off.recursive_phase2_guardrails}` | `{on.recursive_phase2_guardrails}` | n/a |",
                     f"| Worktree isolation | `{off.recursive_isolation_status}` | `{on.recursive_isolation_status}` | n/a |",
+                    f"| Delivery integrity | `{off.recursive_delivery_status}` | `{on.recursive_delivery_status}` | n/a |",
                     f"| Duration seconds | `{off.duration_seconds:.2f}` | `{on.duration_seconds:.2f}` | `{on.duration_seconds - off.duration_seconds:+.2f}` |",
                     f"| Build | `{'pass' if off.build_success else 'fail'}` | `{'pass' if on.build_success else 'fail'}` | n/a |",
                     f"| Test | `{'pass' if off.test_success else 'fail'}` | `{'pass' if on.test_success else 'fail'}` | n/a |",
@@ -1803,12 +4118,36 @@ class BenchmarkHarness:
                     f"| `normalized:benchmark` | `{format_score(off.benchmark_score or 0)}/100` | `{format_score(on.benchmark_score or 0)}/100` | `{format_score((on.benchmark_score or 0) - (off.benchmark_score or 0)) if off.benchmark_score is not None and on.benchmark_score is not None else 'n/a'}` |",
                 ]
             )
+            off_adjusted_percentage = self.normalized_score(off.judge_adjusted_score, off.score_max)
+            on_adjusted_percentage = self.normalized_score(on.judge_adjusted_score, on.score_max)
+            if off_adjusted_percentage is not None or on_adjusted_percentage is not None:
+                adjusted_delta = (
+                    format_score((on_adjusted_percentage or 0) - (off_adjusted_percentage or 0))
+                    if off_adjusted_percentage is not None and on_adjusted_percentage is not None
+                    else "n/a"
+                )
+                off_adjusted_text = (
+                    f"{format_score(off_adjusted_percentage)}/100" if off_adjusted_percentage is not None else "n/a"
+                )
+                on_adjusted_text = (
+                    f"{format_score(on_adjusted_percentage)}/100" if on_adjusted_percentage is not None else "n/a"
+                )
+                summary_lines.append(
+                    f"| `normalized:entry-adjusted` | `{off_adjusted_text}` | `{on_adjusted_text}` | `{adjusted_delta}` |"
+                )
             score_keys = sorted(set(off.score_breakdown) | set(on.score_breakdown))
             for key in score_keys:
-                off_value = off.score_breakdown.get(key, 0.0)
-                on_value = on.score_breakdown.get(key, 0.0)
+                off_value = self.effective_score_breakdown(off).get(key, 0.0)
+                on_value = self.effective_score_breakdown(on).get(key, 0.0)
+                note_parts = [format_score(on_value - off_value)]
+                off_adjustment = self.describe_entry_adjustment(off, key, "off")
+                on_adjustment = self.describe_entry_adjustment(on, key, "on")
+                if off_adjustment:
+                    note_parts.append(off_adjustment)
+                if on_adjustment:
+                    note_parts.append(on_adjustment)
                 summary_lines.append(
-                    f"| `score:{key}` | `{format_score(off_value)}` | `{format_score(on_value)}` | `{format_score(on_value - off_value)}` |"
+                    f"| `score:{key}` | {self.format_entry_score(off, key)} | {self.format_entry_score(on, key)} | {'; '.join(note_parts)} |"
                 )
 
             all_issues = sorted(set(off.issues) | set(on.issues))
@@ -1841,6 +4180,7 @@ class BenchmarkHarness:
     def write_report(self) -> Path:
         report_path = self.workspace_root / "benchmark-report.md"
         for result in self.results:
+            self.normalize_result_lists(result)
             self.update_combined_benchmark_score(result)
         summary_lines = [
             "# recursive-mode benchmark report",
@@ -1854,6 +4194,7 @@ class BenchmarkHarness:
             f"- Timeout minutes per arm: `{self.args.max_minutes}`",
             f"- Arm execution mode requested: `{self.args.arm_mode}`",
             f"- Benchmark score weighting: `{int(DEFAULT_HEURISTIC_WEIGHT * 100)}% heuristic + {int(DEFAULT_JUDGE_WEIGHT * 100)}% judge`",
+            "- Entry-table feature rows may show judge-adjusted per-entry scores when the code-review judge supplied concrete corrections; the blended benchmark score still uses raw heuristic + judge overall score to avoid double-counting the judge.",
             "",
         ]
         if self.effective_arm_modes:
@@ -1870,8 +4211,8 @@ class BenchmarkHarness:
             [
                 "## Scoreboard",
                 "",
-                "| Runner | Arm | Model | Outcome | Benchmark score | Agent status | Product outcome | Recursive workflow | Worktree isolation | Duration (s) | Build | Test | Preview | Heuristic score | Judge metric | Screenshots | Tokens |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | --- |",
+                "| Runner | Arm | Model | Outcome | Benchmark score | Agent status | Product outcome | Recursive workflow | Worktree isolation | Delivery integrity | Duration (s) | Build | Test | Preview | Heuristic score | Judge metric | Screenshots | Tokens |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | --- |",
             ]
         )
         for result in self.results:
@@ -1887,7 +4228,7 @@ class BenchmarkHarness:
                 else "n/a"
             )
             summary_lines.append(
-                "| {runner} | {arm} | `{model}` | {status} | {benchmark_score} | {agent_status} | {product_status} | {workflow} | {isolation} | {duration:.2f} | {build} | {test} | {preview} | {score}/{score_max} | {judge_metric} | {screenshots} | {tokens} |".format(
+                "| {runner} | {arm} | `{model}` | {status} | {benchmark_score} | {agent_status} | {product_status} | {workflow} | {isolation} | {delivery} | {duration:.2f} | {build} | {test} | {preview} | {score}/{score_max} | {judge_metric} | {screenshots} | {tokens} |".format(
                     runner=result.runner_name,
                     arm=result.arm_name,
                     model=result.model,
@@ -1897,6 +4238,7 @@ class BenchmarkHarness:
                     product_status=result.product_status,
                     workflow=result.recursive_workflow_status,
                     isolation=result.recursive_isolation_status,
+                    delivery=result.recursive_delivery_status,
                     duration=result.duration_seconds,
                     build="pass" if result.build_success else "fail",
                     test="pass" if result.test_success else "fail",
@@ -1926,10 +4268,16 @@ class BenchmarkHarness:
                     f"- Recursive workflow profile: `{result.recursive_workflow_profile}`",
                     f"- Phase 1/2 guardrails: `{result.recursive_phase2_guardrails}`",
                     f"- Worktree isolation: `{result.recursive_isolation_status}`",
+                    f"- Delivery integrity: `{result.recursive_delivery_status}`",
                     (
                         f"- Worktree location: `{result.recursive_worktree_location}`"
                         if result.recursive_worktree_location
                         else "- Worktree location: `n/a`"
+                    ),
+                    (
+                        f"- Expected product root: `{result.expected_product_root}`"
+                        if result.expected_product_root
+                        else "- Expected product root: `n/a`"
                     ),
                     f"- Repo: `{result.repo_root}`" if result.repo_root else "- Repo: `n/a`",
                     (
@@ -1964,6 +4312,11 @@ class BenchmarkHarness:
                     ),
                     f"- Heuristic harness score: `{format_score(result.score)}/{format_score(result.score_max)}`",
                     (
+                        f"- Judge-adjusted entry score: `{format_score(result.judge_adjusted_score or 0)}/{format_score(result.score_max)}`"
+                        if result.judge_adjusted_score is not None
+                        else "- Judge-adjusted entry score: `n/a`"
+                    ),
+                    (
                         f"- Code-review judge metric: `{format_score(result.judge_score)}/{format_score(result.judge_max or 0)}`"
                         if result.judge_score is not None
                         else "- Code-review judge metric: `n/a`"
@@ -1977,13 +4330,24 @@ class BenchmarkHarness:
                     f"- Hint penalty: `{format_score(result.hint_penalty)}`",
                     f"- Timestamp fallback used: `{'yes' if result.timestamp_fallback_used else 'no'}`",
                     "",
-                    "#### Score breakdown",
+                    "#### Raw heuristic score breakdown",
                     "",
                 ]
             )
             if result.score_breakdown:
                 for key, value in sorted(result.score_breakdown.items()):
                     summary_lines.append(f"- `{key}`: {format_score(value)}")
+            else:
+                summary_lines.append("- none")
+            summary_lines.extend(["", "#### Judge-adjusted score breakdown", ""])
+            if result.judge_adjusted_score_breakdown:
+                for key, value in sorted(result.judge_adjusted_score_breakdown.items()):
+                    raw = result.score_breakdown.get(key, value)
+                    reason = result.judge_entry_adjustment_reasons.get(key, "")
+                    line = f"- `{key}`: {format_score(value)} (raw {format_score(raw)})"
+                    if reason:
+                        line += f" - {reason}"
+                    summary_lines.append(line)
             else:
                 summary_lines.append("- none")
             summary_lines.extend(["", "#### Issues", ""])
@@ -2004,6 +4368,22 @@ class BenchmarkHarness:
                     summary_lines.append(f"- `{file_name}`: `{'present' if present else 'missing'}`")
             else:
                 summary_lines.append("- n/a")
+            summary_lines.extend(["", "#### Recursive delivery evidence", ""])
+            if result.arm_name != "recursive-on":
+                summary_lines.append("- n/a")
+            else:
+                summary_lines.append(
+                    f"- Claimed product files: `{', '.join(result.recursive_claimed_files) if result.recursive_claimed_files else 'none'}`"
+                )
+                summary_lines.append(
+                    f"- Changed product files in product root: `{', '.join(result.recursive_product_change_paths) if result.recursive_product_change_paths else 'none'}`"
+                )
+                summary_lines.append(
+                    f"- Root-only product drift: `{', '.join(result.recursive_root_product_drift) if result.recursive_root_product_drift else 'none'}`"
+                )
+                summary_lines.append(
+                    f"- Claimed files missing in worktree: `{', '.join(result.recursive_missing_claimed_files) if result.recursive_missing_claimed_files else 'none'}`"
+                )
             summary_lines.extend(["", "#### Screenshots", ""])
             if result.screenshot_paths:
                 for screenshot in result.screenshot_paths:

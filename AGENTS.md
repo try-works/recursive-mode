@@ -73,8 +73,6 @@ Useful scripts:
 - `scripts/lint-recursive-run.ps1`
 - `scripts/recursive-review-bundle.py`
 - `scripts/recursive-review-bundle.ps1`
-- `scripts/run-recursive-benchmark.py`
-- `scripts/run-recursive-benchmark.ps1`
 - `scripts/recursive-subagent-action.py`
 - `scripts/recursive-subagent-action.ps1`
 - `scripts/recursive-lock.py`

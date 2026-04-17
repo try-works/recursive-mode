@@ -1,0 +1,74 @@
+Use the recursive-mode workflow already bootstrapped into this repository to implement the benchmark run.
+
+Read:
+
+- `.recursive/RECURSIVE.md`
+- `.recursive/AGENTS.md`
+- `.codex/AGENTS.md`
+- `.agent/PLANS.md`
+- `.recursive/STATE.md`
+- `.recursive/DECISIONS.md`
+- `.recursive/memory/MEMORY.md`
+- `.recursive/run/{{RUN_ID}}/00-requirements.md`
+
+Rules:
+
+- Treat the bootstrapped recursive control-plane files in this repo as the recursive-mode skill for this benchmark run.
+- Use the recursive-mode scaffold already present in the repo.
+- A lint-shaped draft template pack is available under `benchmark/recursive-templates/`. Copy the matching template files into `.recursive/run/{{RUN_ID}}/` and replace every `TODO` placeholder instead of inventing new headings or field names from scratch.
+- The controller also seeded `.recursive/run/{{RUN_ID}}/evidence/logs/baseline/`, `.recursive/run/{{RUN_ID}}/evidence/logs/green/`, `.recursive/run/{{RUN_ID}}/evidence/manual/`, and `.recursive/run/{{RUN_ID}}/evidence/screenshots/`. Use those exact directories for audited-phase evidence.
+- Before locking any recursive artifact, remove the template `## TODO` section entirely after you have incorporated its checklist items. Locked artifacts may keep the completed content, but they must not retain the literal `## TODO` heading.
+- Match lint-required section headings exactly, including `## Changes Applied` and `## Failures and Diagnostics (if any)`.
+- The expected implementation root for this run is `{{EXPECTED_PRODUCT_ROOT}}` relative to the repository root.
+- Use recursive worktree isolation for the run when the control-plane docs require it, and record the chosen location clearly in `00-worktree.md`.
+- Treat `{{EXPECTED_PRODUCT_ROOT}}` as the product root for all product edits, builds, tests, previews, and screenshots unless the control-plane docs force a different path.
+- In recursive artifacts, cite repo paths relative to the repository root. For product work inside the isolated worktree, prefer path forms like `{{EXPECTED_PRODUCT_ROOT}}/src/main.rs`, `{{EXPECTED_PRODUCT_ROOT}}/Cargo.toml`, and `{{EXPECTED_PRODUCT_ROOT}}/benchmark/screenshots/...` rather than `src/main.rs`, `Cargo.toml`, or `benchmark/screenshots/...`.
+- In `00-worktree.md`, preserve the full 40-character baseline commit already present in the template diff-basis fields. Do not shorten it.
+- If any cargo or trunk command could accidentally resolve the control-plane repo root, switch into `{{EXPECTED_PRODUCT_ROOT}}` first or use an explicit manifest/path so the product worktree remains the command target.
+- For the Rust/WASM xhard fixture, keep the worktree `Cargo.toml` self-rooting so cargo and trunk commands executed in `{{EXPECTED_PRODUCT_ROOT}}` do not walk up into the control-plane repo root. Preserve or add an empty `[workspace]` section when needed.
+- Do not implement the product in the control-plane repo root when `{{EXPECTED_PRODUCT_ROOT}}` is available. If you believe repo-root implementation is unavoidable, explain why in `00-worktree.md`, treat it as an exception, and note the risk in your final response.
+- Do not rename, delete, back up, or patch the control-plane repo-root `Cargo.toml` or other repo-root product manifests to make worktree commands succeed. Treat repo-root manifest churn as benchmark-risky.
+- Do not leave transient Rust/build runtime output under the control-plane repo root when `{{EXPECTED_PRODUCT_ROOT}}` is available.
+- Do not edit repo-root `.gitignore` just to hide benchmark runtime output. If browser tooling writes `.playwright-mcp/`, `.cargo-target-dir/`, or similar runtime byproducts under the control-plane repo root, clean them before audited closeout.
+- When writing `Changed Files`, `Worktree Diff Audit`, or `Requirement Completion Status`, account for the final diff-owned worktree files that remain after runtime cleanup, including bootstrapped control-plane files under the worktree such as `{{EXPECTED_PRODUCT_ROOT}}/.agent/PLANS.md`, `{{EXPECTED_PRODUCT_ROOT}}/.codex/AGENTS.md`, `{{EXPECTED_PRODUCT_ROOT}}/.recursive/**`, `{{EXPECTED_PRODUCT_ROOT}}/.gitignore`, and benchmark files like `{{EXPECTED_PRODUCT_ROOT}}/benchmark/agent-log.md` if they changed.
+- Treat `.recursive/run/{{RUN_ID}}/00-requirements.md` as the source of truth for scope.
+- After reading the control-plane docs above, implement run `{{RUN_ID}}` end-to-end instead of stopping after scaffold creation.
+- Drive the run forward so `05-manual-qa.md`, `06-decisions-update.md`, `07-state-update.md`, and `08-memory-impact.md` are all created, completed, and locked to reflect the work performed.
+- Assume the controller will lint the recursive run artifacts after completion; missing or draft late-phase receipts count against the recursive-on arm.
+- The benchmark workspace is disposable. Read the required control-plane docs, but do not spend time on repo archaeology or prior-run exploration unless `DECISIONS.md` clearly points to a directly relevant run.
+- Keep recursive artifacts concise. Prefer short, evidence-backed receipts over essays; reuse source quotes, file paths, and command outputs instead of re-explaining the same detail repeatedly.
+- Do not postpone Phase 1 and Phase 2 until after the product is mostly finished. Create and lock the required upstream artifacts early enough that implementation, verification, QA, and closeout can finish inside the run budget.
+- Use pragmatic recursive defaults unless the control-plane docs require something stricter: if strict RED/GREEN TDD is too expensive here, record `TDD Mode: pragmatic` with a concrete rationale and compensating evidence; if manual QA does not require a human, prefer `QA Execution Mode: agent-operated`.
+- If subagent or delegated-audit capability is unavailable in this environment, do not stall waiting for it. Record the required self-audit metadata and continue the audited phase with concise, explicit repair notes.
+- Before any long build/test/preview loop, make sure `01-as-is.md` and `02-to-be-plan.md` are already lock-valid.
+- Before your final response, verify that the run folder contains concise, lock-valid artifacts through `08-memory-impact.md`; missing late-phase receipts count as an incomplete delivery even if the app works.
+- Match the lint-required section headings exactly instead of inventing your own structure. For `00-worktree.md`, include `Directory Selection`, `Safety Verification`, `Worktree Creation`, `Main Branch Protection`, `Project Setup`, `Test Baseline Verification`, `Worktree Context`, `Diff Basis For Later Audits`, and `Traceability`.
+- For `01-as-is.md`, include `Reproduction Steps (Novice-Runnable)`, `Current Behavior by Requirement`, `Source Requirement Inventory`, `Relevant Code Pointers`, `Known Unknowns`, `Evidence`, `Traceability`, and the required audited-phase sections. For `02-to-be-plan.md`, include `Planned Changes by File`, `Requirement Mapping`, `Implementation Steps`, `Testing Strategy`, `Playwright Plan (if applicable)`, `Manual QA Scenarios`, `Idempotence and Recovery`, `Implementation Sub-phases`, `Plan Drift Check`, `Traceability`, and the required audited-phase sections.
+- For `03-implementation-summary.md`, keep the template structure and include `## Changes Applied`, a real `## Pragmatic TDD Exception` block when you use pragmatic mode, and a `Compensating validation:` field with concrete evidence-file citations. Do not turn `Compensating validation` into its own heading.
+- For audited phases, include an explicit `Audit: PASS|FAIL` verdict and do not mark `Coverage: PASS` or `Approval: PASS` unless `Audit: PASS` is already true.
+- Use only repo-valid `Requirement Completion Status` values. Phase 2 uses `planned`, `planned-via-merge`, `planned-indirectly`, `deferred`, `out-of-scope`, `blocked`, or `superseded by approved addendum`. Other audited phases use `implemented`, `verified`, `deferred`, `out-of-scope`, `blocked`, or `superseded by approved addendum`. For unmet starter requirements in Phase 1, prefer `blocked` with concrete rationale/evidence instead of `not-started`.
+- In every `Traceability` section, mention each in-scope requirement ID (`R1` through `R7`) explicitly rather than only using umbrella prose.
+- In every `Prior Recursive Evidence Reviewed` section, either cite real `.recursive/run/...` or `.recursive/memory/...` paths, or write an explicit sentence using `None because ...`.
+- In `01-as-is.md`, keep prose in `Rationale`; `Blocking Evidence` must cite existing repo paths or current-run artifacts, not freeform sentences.
+- For `Blocking Evidence`, `Implementation Evidence`, `Verification Evidence`, and QA evidence, cite exact existing files only. Bare directories, glob patterns, and prose explanations do not count.
+- In `02-to-be-plan.md`, `Status: planned*` lines must use `Implementation Surface`, `Verification Surface`, and `QA Surface`. Do not use `Changed Files` or `Plan Evidence` in those Phase 2 status entries.
+- In `02-to-be-plan.md`, every `Implementation Surface` entry must cite concrete repo paths, including umbrella quality-gate requirements such as `R7`; do not use vague phrases like `all product files above`.
+- In `02-to-be-plan.md`, `04-test-summary.md`, `05-manual-qa.md`, and later audited phases, cite concrete evidence files under `.recursive/run/{{RUN_ID}}/evidence/`. If you save screenshots under `{{EXPECTED_PRODUCT_ROOT}}/benchmark/screenshots/`, also copy the exact files you cite into `.recursive/run/{{RUN_ID}}/evidence/screenshots/`.
+- When `QA Execution Mode: agent-operated`, make sure the cited evidence paths live under `.recursive/run/{{RUN_ID}}/evidence/` or strict lint will fail.
+- In `03-implementation-summary.md` and later audited phases, cite only files that actually exist in the final worktree. If logic stays in `{{EXPECTED_PRODUCT_ROOT}}/src/lib.rs`, cite that exact path rather than hypothetical split files like `src/parser.rs`.
+- In `04-test-summary.md` and later audited phases, `Verification Evidence` must be distinct from the Phase 3 implementation evidence. Cite actual green test/build logs, QA notes, or screenshot/manual evidence rather than merely repeating the implementation-summary citations.
+- In `01-as-is.md`, blank-starter feature gaps are expected baseline findings, not unresolved audit defects. Keep `Gaps Found` limited to actual analysis or artifact problems; do not leave `Audit: PASS` paired with unresolved in-scope gaps there.
+- Product-quality details matter in this fixture: persist memory and history state, make the memory register visible in the UI, and ensure history entries restore a reusable expression/result rather than a non-editable transcript.
+- Product-quality details also matter here: handle keyboard input at the document/app level so digits, operators, Enter, Backspace, and Escape work without requiring hidden-container focus; make `CE` and sign-toggle behave on the active entry/operand; restore reusable expressions from history; parse exponentiation right-associatively; reject unknown characters visibly; and consume the full expression instead of silently ignoring trailing junk.
+- Include responsive layout signals that the controller can detect, such as a grid-based calculator shell with `max-width`, explicit `grid-template-columns` or `minmax(...)`, and at least one small-screen `@media` rule.
+- Keep a benchmark progress log in `benchmark/agent-log.md` inside the product root.
+- If the product root differs from the repository root, keep the product-root log authoritative and add a short repo-root `benchmark/agent-log.md` pointer or mirrored summary so controller-side review can find the real progress log quickly.
+- Each log entry should include a UTC timestamp, what you tried, issues met, and whether build/test/preview status changed.
+- If the controller provides a hint during the benchmark, append it to `benchmark/hints.md` with a UTC timestamp and a short note about what changed afterward.
+- If you take screenshots for browser or visual validation, save them under `benchmark/screenshots/` inside the product root and record the file paths in `benchmark/agent-log.md`.
+- Do not use screenshot or image tools that send PNG/image bytes back into the conversation. Prefer file-only browser automation or script-based capture that writes screenshots directly to disk, then cite the saved paths without reopening the images.
+- Never read `.png` files back into the model after capture. Screenshot evidence is path-based only.
+- If your available tooling can only capture screenshots through an inline-image tool, defer that step until the written recursive receipts are ready to finalize so a screenshot capability failure cannot strand the run before `03` through `08`.
+- If your runtime exposes token or usage metrics, record them in the log; otherwise note that they were unavailable.
+- Finish by making the project build, test, and preview locally when possible.
+- In your final response, summarize completion status, build status, test status, preview status, screenshot paths if any, and any remaining gaps.

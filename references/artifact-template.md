@@ -134,7 +134,7 @@ If either gate fails, set `FAIL` and list exact fixes required before proceeding
 
 ## Universal Audit Sections (Audited Phases)
 
-Use this block in every audited phase for `recursive-mode-audit-v1`:
+Use this block in every audited phase for `recursive-mode-audit-v1` and `recursive-mode-audit-v2`:
 
 ```md
 ## Audit Context
@@ -632,7 +632,7 @@ Required outcome:
 Run: `/.recursive/run/<run-id>/`
 Phase: `00 Requirements`
 Status: `DRAFT`
-Workflow version: `recursive-mode-audit-v1`
+Workflow version: `recursive-mode-audit-v2`
 Inputs:
 - [chat summary or source notes if captured in repo]
 Outputs:

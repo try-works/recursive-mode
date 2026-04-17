@@ -6,6 +6,6 @@ describe("App", () => {
   it("renders the benchmark starter heading", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Local First Planner" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Release Readiness Dashboard" })).toBeInTheDocument();
   });
 });

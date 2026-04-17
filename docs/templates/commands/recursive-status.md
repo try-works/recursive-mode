@@ -37,7 +37,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-status.ps1" -RepoRoot . -Ru
 Recursive Run: <run-id>
 ===================================
 
-Workflow Profile: recursive-mode-audit-v1
+Workflow Profile: recursive-mode-audit-v2
 
 Phase Status:
   Phase 0 (Requirements)     [LOCKED]

@@ -1,0 +1,14 @@
+[package]
+name = "scientific-calculator-benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+yew = { version = "0.21", features = ["csr"] }
+
+[profile.release]
+opt-level = "z"
+codegen-units = 1
+lto = true
+
+[workspace]

@@ -33,8 +33,8 @@ Spec-authoring rule:
 
 Benchmark rule:
 
-- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, prefer `recursive-benchmark`.
-- `recursive-benchmark` should use the packaged benchmark fixture, create paired disposable repos, keep the benchmark requirements aligned across both arms, capture logs and timings, and write a final comparison report.
+- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, install and use the separate optional `recursive-benchmark` add-on on demand instead of assuming benchmark fixtures ship with the default recursive-mode package.
+- Prefer `find-skills` when available. Otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
 
 Audit delegation rule:
 

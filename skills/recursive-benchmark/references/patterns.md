@@ -54,6 +54,7 @@ Support packaged tiers such as:
 - easy
 - medium
 - hard
+- xhard
 
 The harness should let the user choose a scenario explicitly instead of hardcoding one benchmark forever.
 
@@ -63,13 +64,13 @@ Use disposable repos and bounded timeouts.
 
 Recommended first-version behavior:
 
-1. copy the packaged starter app into temp repos
+1. copy the packaged benchmark starter repo into temp repos; the scaffold may be bootstrap-only and should not be assumed to contain starter product code
 2. provide the same benchmark requirements to both arms, while keeping recursive-off requirements in prompt text only
-3. bootstrap the live recursive scaffold only in the recursive-on repo, place the benchmark requirements in the run-local `00-requirements.md`, and prompt the agent to read `/.recursive/RECURSIVE.md` plus the bridge docs before starting
+3. bootstrap the live recursive scaffold only in the recursive-on repo, wrap the benchmark requirements into a recursive-compliant run-local `00-requirements.md`, and prompt the agent to read `/.recursive/RECURSIVE.md` plus the bridge docs before starting
 4. invoke the selected coding-agent CLI non-interactively
 5. run a mandatory controller-side judge review for every completed arm, preferring `gpt-5.4` and falling back to the benchmarked model when necessary
 6. update per-arm progress files so status can be inferred from file changes in the benchmark workspace
-7. evaluate the finished repos with build, test, preview, and recursive-run-artifact checks for the recursive-on arm
+7. evaluate the finished repos with build, test, preview, recursive-run-artifact checks, and controller-side recursive lint for the recursive-on arm; for Rust nested worktrees, use an isolated evaluation snapshot when parent repo manifests would otherwise interfere
 
 If the runtime and provider can handle it, the harness may also offer a parallel arm mode. If a runner proves unstable in parallel, the harness should automatically downgrade that runner to sequential execution and note the downgrade in the report.
 
@@ -107,6 +108,7 @@ The harness report should distinguish:
 - any later controller-side review score
 - combined benchmark score that blends heuristic coverage and judge review
 - recursive-on worktree isolation status sourced from `00-worktree.md`
+- recursive-on closeout/lint status and any repo-root delivery drift that violates the declared product root
 
 Recommended default weighting:
 

@@ -88,8 +88,6 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `scripts/lint-recursive-run.ps1`
 - `scripts/recursive-review-bundle.py`
 - `scripts/recursive-review-bundle.ps1`
-- `scripts/run-recursive-benchmark.py`
-- `scripts/run-recursive-benchmark.ps1`
 - `scripts/recursive-subagent-action.py`
 - `scripts/recursive-subagent-action.ps1`
 - `scripts/recursive-lock.py`
@@ -102,7 +100,6 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 ## Subskills
 
 - `skills/recursive-spec/SKILL.md`
-- `skills/recursive-benchmark/SKILL.md`
 - `skills/recursive-worktree/SKILL.md`
 - `skills/recursive-debugging/SKILL.md`
 - `skills/recursive-tdd/SKILL.md`
@@ -110,6 +107,11 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `skills/recursive-subagent/SKILL.md`
 
 Use those subskills for their specialized discipline, but keep `/.recursive/RECURSIVE.md` as the single source of truth for the overall workflow contract.
+
+## Optional add-on
+
+- `recursive-benchmark` is intentionally excluded from the default exported recursive-mode package because it carries large packaged benchmark fixtures.
+- Install it only when a user explicitly asks to benchmark recursive-mode, preferably via `find-skills` or by adding its dedicated benchmark add-on package or repo source.
 
 For audited phases, the installed workflow requires `draft -> audit -> repair -> re-audit -> pass -> lock`, with `Audit: PASS` required before Coverage/Approval may pass.
 Treat `## Worktree Diff Audit` as phase-scoped: Phase 2 owns planning completeness plus expected product/worktree paths, Phase 3-4 own actual product/worktree drift, Phase 6 owns `/.recursive/DECISIONS.md`, Phase 7 owns `/.recursive/STATE.md`, and Phase 8 owns `/.recursive/memory/**`.

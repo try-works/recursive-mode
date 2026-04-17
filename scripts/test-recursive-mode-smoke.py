@@ -329,6 +329,18 @@ class SmokeHarness:
                 cwd=self.repo_root,
             )
 
+        recursive_agents = (self.repo_root / ".recursive" / "AGENTS.md").read_text(encoding="utf-8")
+        if "/skills/recursive-benchmark/SKILL.md" in recursive_agents or "/references/benchmarks/" in recursive_agents:
+            raise SmokeError("Default recursive-mode bootstrap still hard-wires benchmark skill/file paths into .recursive/AGENTS.md.")
+        if "separate optional `recursive-benchmark` add-on" not in recursive_agents:
+            raise SmokeError("Default recursive-mode bootstrap did not explain that recursive-benchmark is a separate opt-in add-on in .recursive/AGENTS.md.")
+
+        plans_bridge = (self.repo_root / ".agent" / "PLANS.md").read_text(encoding="utf-8")
+        if "separate optional `recursive-benchmark` add-on" not in plans_bridge:
+            raise SmokeError("Default recursive-mode bootstrap did not explain that recursive-benchmark is a separate opt-in add-on in .agent/PLANS.md.")
+        if "should use the packaged benchmark fixture" in plans_bridge:
+            raise SmokeError("Default recursive-mode bootstrap still assumes benchmark fixtures are present in .agent/PLANS.md.")
+
         self.run_command([str(self.python_exe), "-m", "unittest", "-q"], cwd=self.repo_root)
         self.git("add", "-A")
         self.git("commit", "-m", "Base tiny tasks app with recursive-mode scaffold")

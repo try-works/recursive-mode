@@ -34,11 +34,10 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/skills/recursive-spec/SKILL.md`
   - relevant code and tests for the requested area
 - Benchmarking recursive-mode against a non-recursive baseline:
-  - `/skills/recursive-benchmark/SKILL.md`
-  - `/references/benchmarks/local-first-planner/README.md`
-  - `/references/benchmarks/local-first-planner/00-requirements.md`
-  - `/references/benchmarks/local-first-planner/scoring-rubric.md`
-  - `/scripts/run-recursive-benchmark.py`
+  - Install the separate optional `recursive-benchmark` add-on only when the user explicitly asks for benchmarking.
+  - Prefer `find-skills` when available; otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
+  - The default exported `recursive-mode` package intentionally excludes benchmark fixtures and benchmark skill files.
+  - After the benchmark add-on is installed, follow its packaged fixture and harness docs.
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`

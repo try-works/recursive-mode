@@ -8,32 +8,40 @@ It gives an agent a file-backed workflow for requirements, planning, implementat
 
 - people who want a stricter, auditable agent workflow inside a repo
 - teams who want requirements and implementation evidence recorded in files
-- users who want installable subskills for requirements/spec authoring, benchmarking, worktrees, debugging, TDD, delegated review, and subagent support
+- users who want installable subskills for requirements/spec authoring, worktrees, debugging, TDD, delegated review, and subagent support, plus an optional benchmarking add-on when needed
 
 ## What It Includes
 
-This repo currently ships these installable skills:
+This repo currently ships these default installable skills:
 
 - `recursive-mode`
 - `recursive-spec`
-- `recursive-benchmark`
 - `recursive-worktree`
 - `recursive-debugging`
 - `recursive-tdd`
 - `recursive-review-bundle`
 - `recursive-subagent`
 
+Optional add-on source:
+
+- `recursive-benchmark`
+
 ## Included Subskills
 
 | Skill | Purpose |
 | --- | --- |
 | `recursive-spec` | Co-authors repo-aware requirements for a new run from plan/spec prompts, keeps the draft outside the repo until approval, then creates the run and writes `00-requirements.md`. |
-| `recursive-benchmark` | Creates paired recursive-off and recursive-on benchmark repos, supports easy/medium/hard packaged scenarios, can run arms sequentially or in parallel with runner-specific fallback when needed, captures logs/timings/screenshots, and writes a comparison report. |
 | `recursive-worktree` | Sets up an isolated worktree before implementation starts. |
 | `recursive-debugging` | Adds structured root-cause analysis before fixing bugs or failing tests. |
 | `recursive-tdd` | Enforces RED-GREEN-REFACTOR discipline for implementation work. |
 | `recursive-review-bundle` | Builds canonical review bundles for delegated Phase 3.5 review. |
 | `recursive-subagent` | Helps delegate bounded implementation, audit, or review work and verify the results. |
+
+Optional add-on:
+
+| Skill | Purpose |
+| --- | --- |
+| `recursive-benchmark` | Creates paired recursive-off and recursive-on benchmark repos, supports easy/medium/hard packaged scenarios, can run arms sequentially or in parallel with runner-specific fallback when needed, captures logs/timings/screenshots, and writes a comparison report. |
 
 ## Functionality
 
@@ -41,7 +49,7 @@ The workflow package includes functionality for:
 
 - turning a repo task into a staged, file-backed implementation run
 - co-authoring repo-aware requirements/specs before creating a new run
-- benchmarking recursive-mode against a non-recursive baseline in paired disposable repos
+- benchmarking recursive-mode against a non-recursive baseline in paired disposable repos when the optional benchmark add-on is installed
 - collecting screenshot artifacts taken during benchmark validation and embedding them in the report when present
 - capturing requirements, analysis, plans, implementation evidence, and validation in durable artifacts
 - enforcing audited phase progression with explicit pass/lock behavior
@@ -171,6 +179,12 @@ Install a single subskill:
 npx skills add try-works/recursive-mode --skill recursive-spec --full-depth
 ```
 
+Install the benchmark add-on only when you explicitly want benchmark runs:
+
+```bash
+npx skills add <recursive-benchmark-package-or-repo> --full-depth
+```
+
 ## Quick Start
 
 After installing the skill package into your agent environment, the intended normal flow is:
@@ -182,7 +196,7 @@ After installing the skill package into your agent environment, the intended nor
 
 `recursive-spec` is intentionally approval-gated: it should collaborate on the draft first, keep that draft in temporary/session storage, and only create `/.recursive/run/<run-id>/00-requirements.md` after the user approves the spec.
 
-If you want to measure recursive-mode itself, use `recursive-benchmark` to create paired `recursive-off` and `recursive-on` benchmark repos from the packaged benchmark fixture and generate a markdown comparison report with logs, scores, and screenshot artifacts when present.
+If you want to measure recursive-mode itself, install `recursive-benchmark` on demand from its dedicated add-on package or repo source and then use it to create paired `recursive-off` and `recursive-on` benchmark repos from the packaged benchmark fixture and generate a markdown comparison report with logs, scores, and screenshot artifacts when present.
 
 Manual bootstrap commands remain the fallback path when the runtime cannot auto-run the installer:
 
@@ -199,6 +213,7 @@ Important boundary:
 
 - `npx skills add ...` installs the skill package into agent directories
 - the target repo scaffold should then be created automatically on first recursive-mode use
+- the large benchmark fixture set is intentionally excluded from the default exported recursive-mode package and should be installed separately only when benchmarking is requested
 - Python and Bash are first-class bootstrap paths, so macOS and Linux users do not need PowerShell
 - if your runtime supports session-start hooks, the templates under `docs/templates/hooks/` can auto-bootstrap the scaffold at session start
 
@@ -232,12 +247,16 @@ Packaged scenario tiers:
 - `local-first-planner` - easy
 - `team-capacity-board` - medium
 - `release-readiness-dashboard` - hard
+- `scientific-calculator-rust` - xhard
+
+The xhard Rust/WASM fixture intentionally starts from a bootstrap-only dependency scaffold rather than a placeholder calculator app, so the benchmarked agent must create the actual product code instead of only transforming preseeded UI and logic files.
 
 Maintainer entrypoints:
 
 ```bash
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner codex --scenario scientific-calculator-rust
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all
 ```
 

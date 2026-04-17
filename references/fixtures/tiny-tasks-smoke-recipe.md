@@ -65,7 +65,7 @@ Expected delegated-review action-record path for the dedicated subagent scenario
 
 ## Expected Workflow Shape
 
-- Workflow profile: `recursive-mode-audit-v1`
+- Workflow profile: `recursive-mode-audit-v2`
 - TDD mode: `strict`
 - QA execution mode: `agent-operated`
 - Optional review phase present: `03.5-code-review.md`

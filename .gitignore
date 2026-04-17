@@ -20,5 +20,12 @@ htmlcov/
 # Local benchmark workspaces
 .benchmark-workspaces/
 
+# Local benchmark toolchain cache
+.benchmark-toolchain/
+
 # Local recursive worktrees
 .worktrees/
+
+# Local benchmark runtime byproducts
+.playwright-mcp/
+.cargo-target-dir/

@@ -1,4 +1,4 @@
-# Local First Planner benchmark starter
+# Release Readiness Dashboard benchmark starter
 
 This starter intentionally ships a minimal placeholder app so the coding agent has real implementation work to do.
 

@@ -1,4 +1,4 @@
-# Local First Planner benchmark starter
+# Team Capacity Board benchmark starter
 
 This starter intentionally ships a minimal placeholder app so the coding agent has real implementation work to do.
 

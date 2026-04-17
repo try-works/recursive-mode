@@ -104,6 +104,51 @@ function Upsert-MarkedBlock {
   }
 }
 
+function Get-NormalizedPlainOrWrappedContent {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
+    [Parameter(Mandatory = $true)][string]$StartMarker,
+    [Parameter(Mandatory = $true)][string]$EndMarker
+  )
+
+  $startIndex = $Content.IndexOf($StartMarker, [System.StringComparison]::Ordinal)
+  $endIndex = $Content.LastIndexOf($EndMarker, [System.StringComparison]::Ordinal)
+  if ($startIndex -lt 0 -or $endIndex -lt 0 -or $endIndex -lt $startIndex) {
+    return $Content.TrimEnd("`r", "`n")
+  }
+
+  $prefix = $Content.Substring(0, $startIndex).TrimEnd("`r", "`n")
+  if (-not [string]::IsNullOrWhiteSpace($prefix)) {
+    return $prefix
+  }
+
+  $bodyStart = $startIndex + $StartMarker.Length
+  return $Content.Substring($bodyStart, $endIndex - $bodyStart).Trim("`r", "`n")
+}
+
+function Sync-PlainFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content
+  )
+
+  $normalized = $Content.TrimEnd("`r", "`n") + "`n"
+  $existing = ""
+  if (Test-Path -LiteralPath $Path) {
+    $existing = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    if ($null -eq $existing) {
+      $existing = ""
+    }
+  }
+
+  if ($existing -ne $normalized) {
+    Write-Utf8NoBom -Path $Path -Content $normalized
+    Write-Output "[OK] Updated file: $Path"
+  } else {
+    Write-Output "[OK] File already up to date: $Path"
+  }
+}
+
 function Get-MemoryRouterBody {
   @'
 ## Memory Router
@@ -397,11 +442,10 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/skills/recursive-spec/SKILL.md`
   - relevant code and tests for the requested area
 - Benchmarking recursive-mode against a non-recursive baseline:
-  - `/skills/recursive-benchmark/SKILL.md`
-  - `/references/benchmarks/local-first-planner/README.md`
-  - `/references/benchmarks/local-first-planner/00-requirements.md`
-  - `/references/benchmarks/local-first-planner/scoring-rubric.md`
-  - `/scripts/run-recursive-benchmark.py`
+  - Install the separate optional `recursive-benchmark` add-on only when the user explicitly asks for benchmarking.
+  - Prefer `find-skills` when available; otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
+  - The default exported `recursive-mode` package intentionally excludes benchmark fixtures and benchmark skill files.
+  - After the benchmark add-on is installed, follow its packaged fixture and harness docs.
 - Working on reusable package/bootstrap/docs for this repo:
   - `/.recursive/README.md`
   - `/README.md`
@@ -465,8 +509,8 @@ Spec-authoring rule:
 
 Benchmark rule:
 
-- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, prefer `recursive-benchmark`.
-- `recursive-benchmark` should use the packaged benchmark fixture, create paired disposable repos, keep the benchmark requirements aligned across both arms, capture logs and timings, and write a final comparison report.
+- If the user asks to benchmark recursive-mode, compare recursive vs non-recursive execution, or generate a recursive-mode benchmark report, install and use the separate optional `recursive-benchmark` add-on on demand instead of assuming benchmark fixtures ship with the default recursive-mode package.
+- Prefer `find-skills` when available. Otherwise use `npx skills add <recursive-benchmark-package-or-repo> --full-depth`.
 
 Audit delegation rule:
 
@@ -594,18 +638,11 @@ Upsert-MarkedBlock `
   -BlockBody ((Get-PlansBridgeBody).TrimEnd("`r", "`n"))
 
 if (-not $SkipRecursiveUpdate) {
-  $canonicalResolved = [System.IO.Path]::GetFullPath($canonicalWorkflowPath)
-  $recursiveResolved = [System.IO.Path]::GetFullPath($recursivePath)
-  if ($canonicalResolved -eq $recursiveResolved) {
-    Write-Output "[INFO] Skipped RECURSIVE.md self-upsert because source and destination are the same file."
-  } else {
-    $canonicalBody = (Get-Content -LiteralPath $canonicalWorkflowPath -Raw -Encoding UTF8).TrimEnd("`r", "`n")
-    Upsert-MarkedBlock `
-      -FilePath $recursivePath `
-      -StartMarker $recursiveStartMarker `
-      -EndMarker $recursiveEndMarker `
-      -BlockBody $canonicalBody
-  }
+  $canonicalBody = Get-NormalizedPlainOrWrappedContent `
+    -Content (Get-Content -LiteralPath $canonicalWorkflowPath -Raw -Encoding UTF8) `
+    -StartMarker $recursiveStartMarker `
+    -EndMarker $recursiveEndMarker
+  Sync-PlainFile -Path $recursivePath -Content $canonicalBody
 } else {
   Write-Output "[INFO] Skipped RECURSIVE.md update by configuration."
 }

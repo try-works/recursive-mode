@@ -3,7 +3,7 @@ export default function App() {
     <main className="app-shell">
       <section className="hero-card">
         <p className="eyebrow">recursive-mode benchmark starter</p>
-        <h1>Local First Planner</h1>
+        <h1>Release Readiness Dashboard</h1>
         <p>
           This placeholder app is intentionally incomplete. The benchmark agent
           is expected to turn it into the product described in

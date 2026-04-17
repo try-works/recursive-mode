@@ -21,7 +21,7 @@ Use `recursive-benchmark` when the user wants to:
 - capture build/test/preview outcomes, timings, issues, and final scores
 - capture and report screenshot artifacts produced during the benchmark
 - generate a markdown benchmark report or dashboard
-- choose among packaged easy, medium, and hard benchmark scenarios
+- choose among packaged easy, medium, hard, and xhard benchmark scenarios
 - optionally run the paired arms in parallel when the runtime/provider can tolerate it; unstable runners should fall back to sequential execution and record that downgrade in the report
 
 ## Benchmark Contract
@@ -30,29 +30,34 @@ For each benchmark run:
 
 1. Create paired disposable repos for `recursive-off` and `recursive-on`.
 2. Give both repos the same benchmark project requirements.
-3. Bootstrap recursive-mode only in the recursive-on repo and place the benchmark requirements in the run-local `00-requirements.md`.
+3. Bootstrap recursive-mode only in the recursive-on repo and place the benchmark requirements in a run-local, recursive-compliant `00-requirements.md`.
 4. Prompt the recursive-on arm to read `/.recursive/RECURSIVE.md`, the bridge docs, and the run requirements before implementing the run.
 5. Record the runner, provider family, model string, and timeout budget.
 6. Execute the selected agent runtime non-interactively for both arms.
 7. Run a mandatory controller-side judge review for every completed arm, preferring `gpt-5.4` and falling back to a fresh instance of the benchmarked model when needed.
-8. Capture logs, durations, issues, screenshot artifacts, live progress artifacts, and evaluation outcomes, including whether the recursive-on arm produced the expected run artifacts through `08-memory-impact.md`.
+8. Capture logs, durations, issues, screenshot artifacts, live progress artifacts, and evaluation outcomes, including whether the recursive-on arm produced the expected run artifacts through `08-memory-impact.md`, passed controller-side recursive run lint, and required an isolated product snapshot for Rust build/test/preview evaluation.
 9. Keep repo-local benchmark workspaces such as `.benchmark-workspaces/` ignored when the harness runs inside the packaged repo.
 10. Produce a final markdown report that compares the two arms side by side, including a combined benchmark score that blends heuristic rubric coverage with the mandatory judge metric.
-11. Surface whether recursive-on completed the recursive artifact set and whether it used an isolated worktree or stayed in the repo root.
+11. Surface whether recursive-on completed the recursive artifact set, whether it passed controller-side recursive lint, and whether it used an isolated worktree or stayed in the repo root.
 
 ## Packaged Scenario Tiers
 
 - `local-first-planner` - easy
 - `team-capacity-board` - medium
 - `release-readiness-dashboard` - hard
+- `scientific-calculator-rust` - xhard
 
 All packaged scenarios should stay:
 
-- React + TypeScript + Vite
 - browser-local state only
 - no external database or server dependencies
 - local browser preview should work from a temp folder
 - output should be suitable for later screenshot validation
+
+Current packaged stacks:
+
+- React + TypeScript + Vite for easy/medium/hard
+- Rust + WebAssembly with Trunk for xhard
 
 ## Logging Requirements
 
