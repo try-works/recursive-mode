@@ -74,9 +74,3 @@ Acceptance criteria:
 - The project must run from a disposable temp folder.
 - Do not require any external service beyond standard Node/npm package installation.
 - Keep the app suitable for later browser-agent screenshot validation.
-
-## Assumptions
-
-- Node.js and npm are available in the benchmark environment.
-- The benchmark harness may preinstall dependencies before the coding agent starts.
-- The coding agent may add small helper modules, tests, and styles as needed.

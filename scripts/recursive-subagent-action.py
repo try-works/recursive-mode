@@ -52,7 +52,7 @@ def main() -> int:
     parser.add_argument("--subagent-id", required=True, help="Subagent identifier.")
     parser.add_argument("--phase", required=True, help="Phase name for the action record.")
     parser.add_argument("--purpose", required=True, help="Invocation purpose.")
-    parser.add_argument("--execution-mode", required=True, help="Execution mode, e.g. review, audit, bounded-implementer.")
+    parser.add_argument("--execution-mode", required=True, help="Execution mode, e.g. review, audit, implementer.")
     parser.add_argument("--artifact-path", default="", help="Repo-relative current artifact path.")
     parser.add_argument("--upstream-artifact", action="append", default=[], help="Repo-relative upstream artifact path.")
     parser.add_argument("--addendum", action="append", default=[], help="Repo-relative addendum path.")
@@ -72,6 +72,18 @@ def main() -> int:
     parser.add_argument("--finding", action="append", default=[], help="Claimed finding or unresolved point.")
     parser.add_argument("--verification-path", action="append", default=[], help="Repo-relative file or artifact path the controller should inspect first.")
     parser.add_argument("--verification-item", action="append", default=[], help="Main-agent verification handoff item.")
+    parser.add_argument("--router-used", default="", help="Router identifier used for delegated dispatch, e.g. recursive-router.")
+    parser.add_argument("--routed-role", default="", help="Canonical routed role resolved for this action.")
+    parser.add_argument("--routed-cli", default="", help="Resolved external CLI id if any.")
+    parser.add_argument("--routed-model", default="", help="Resolved model id if any.")
+    parser.add_argument("--routing-config-path", default="", help="Repo-relative routing policy path.")
+    parser.add_argument("--routing-discovery-path", default="", help="Repo-relative routing discovery path.")
+    parser.add_argument("--routing-resolution-basis", default="", help="Short explanation of how the route was resolved.")
+    parser.add_argument("--routing-fallback-reason", default="", help="Why execution fell back from routed delegation, if applicable.")
+    parser.add_argument("--cli-probe-summary", default="", help="Compact CLI probe summary for the action record.")
+    parser.add_argument("--prompt-bundle-path", default="", help="Repo-relative routed prompt bundle path if used.")
+    parser.add_argument("--invocation-exit-code", default="", help="External CLI invocation exit code if applicable.")
+    parser.add_argument("--output-capture-path", action="append", default=[], help="Repo-relative captured output path from the routed CLI.")
     parser.add_argument("--output-name", default="", help="Optional action record filename under subagents/.")
     args = parser.parse_args()
 
@@ -113,6 +125,10 @@ def main() -> int:
     evidence_used = sorted(set(normalize_repo_path(value) for value in args.evidence_used if value.strip()))
     actions_taken = [value.strip() for value in args.action_taken if value.strip()]
     verification_paths = sorted(set(normalize_repo_path(value) for value in args.verification_path if value.strip()))
+    output_capture_paths = sorted(set(normalize_repo_path(value) for value in args.output_capture_path if value.strip()))
+    routing_config_path = normalize_repo_path(args.routing_config_path) if args.routing_config_path.strip() else ""
+    routing_discovery_path = normalize_repo_path(args.routing_discovery_path) if args.routing_discovery_path.strip() else ""
+    prompt_bundle_path = normalize_repo_path(args.prompt_bundle_path) if args.prompt_bundle_path.strip() else ""
 
     lines: list[str] = [
         "# Subagent Action Record",
@@ -137,6 +153,20 @@ def main() -> int:
     lines.extend(render_path_list("- Code Refs:", [f"/{value}" for value in code_refs]))
     lines.extend(render_path_list("- Memory Refs:", [f"/{value}" for value in memory_refs]))
     lines.extend(render_text_list("- Audit / Task Questions:", args.audit_question))
+    lines.append("")
+    lines.append("## Routing")
+    lines.append(f"- Router Used: `{args.router_used.strip() or 'none'}`")
+    lines.append(f"- Routed Role: `{args.routed_role.strip() or 'none'}`")
+    lines.append(f"- Routed CLI: `{args.routed_cli.strip() or 'none'}`")
+    lines.append(f"- Routed Model: `{args.routed_model.strip() or 'none'}`")
+    lines.append(f"- Routing Config Path: `{('/' + routing_config_path) if routing_config_path else 'none'}`")
+    lines.append(f"- Routing Discovery Path: `{('/' + routing_discovery_path) if routing_discovery_path else 'none'}`")
+    lines.append(f"- Routing Resolution Basis: `{args.routing_resolution_basis.strip() or 'none'}`")
+    lines.append(f"- Routing Fallback Reason: `{args.routing_fallback_reason.strip() or 'none'}`")
+    lines.append(f"- CLI Probe Summary: `{args.cli_probe_summary.strip() or 'none'}`")
+    lines.append(f"- Prompt Bundle Path: `{('/' + prompt_bundle_path) if prompt_bundle_path else 'none'}`")
+    lines.append(f"- Invocation Exit Code: `{args.invocation_exit_code.strip() or 'none'}`")
+    lines.extend(render_path_list("- Output Capture Paths:", [f"/{value}" for value in output_capture_paths]))
     lines.append("")
     lines.extend(render_text_list("## Claimed Actions Taken", actions_taken))
     lines.append("")

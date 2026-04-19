@@ -320,6 +320,13 @@ Role: `code-reviewer`
 Artifact path: `/.recursive/run/<run-id>/03.5-code-review.md`
 Artifact Content Hash: `<sha256>`
 
+## Routing
+
+- Routed CLI: `none`
+- Routed Model: `none`
+- Routing Config Path: `none`
+- Routing Discovery Path: `none`
+
 ## Upstream Artifacts
 
 - `/.recursive/run/<run-id>/00-requirements.md`
@@ -410,6 +417,20 @@ Use this when a meaningful subagent invocation contributes to a phase outcome. T
 - Code Refs:
 - Memory Refs:
 - Audit / Task Questions:
+
+## Routing
+- Router Used:
+- Routed Role:
+- Routed CLI:
+- Routed Model:
+- Routing Config Path:
+- Routing Discovery Path:
+- Routing Resolution Basis:
+- Routing Fallback Reason:
+- CLI Probe Summary:
+- Prompt Bundle Path:
+- Invocation Exit Code:
+- Output Capture Paths:
 
 ## Claimed Actions Taken
 - [bullet list]
@@ -668,10 +689,6 @@ Acceptance criteria:
 - `OOS2`: ...
 
 ## Constraints
-
-- ...
-
-## Assumptions
 
 - ...
 

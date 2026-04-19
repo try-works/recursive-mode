@@ -13,6 +13,10 @@ param(
     [string[]]$EvidenceRef = @(),
     [string[]]$AuditQuestion = @(),
     [string[]]$RequiredOutput = @(),
+    [string]$RoutingConfigPath = "",
+    [string]$RoutingDiscoveryPath = "",
+    [string]$RoutedCli = "",
+    [string]$RoutedModel = "",
     [string]$OutputName = "",
     [switch]$NoAutoAddenda
 )
@@ -45,6 +49,10 @@ foreach ($value in @($CodeRef)) { foreach ($piece in ($value -split ",")) { if (
 foreach ($value in @($EvidenceRef)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--evidence-ref", $piece.Trim()) } } }
 foreach ($value in @($AuditQuestion)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--audit-question", $piece.Trim()) } } }
 foreach ($value in @($RequiredOutput)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--required-output", $piece.Trim()) } } }
+if ($RoutingConfigPath) { $argsList += @("--routing-config-path", $RoutingConfigPath) }
+if ($RoutingDiscoveryPath) { $argsList += @("--routing-discovery-path", $RoutingDiscoveryPath) }
+if ($RoutedCli) { $argsList += @("--routed-cli", $RoutedCli) }
+if ($RoutedModel) { $argsList += @("--routed-model", $RoutedModel) }
 
 & $python @argsList
 exit $LASTEXITCODE

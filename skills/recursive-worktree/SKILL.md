@@ -54,7 +54,9 @@ If the user explicitly insists on main-branch work, record that exception in `00
 - branch name and worktree path
 - setup commands executed
 - baseline test command and result
+- normalized diff basis fields including `Baseline type`, `Baseline reference`, `Comparison reference`, `Normalized baseline`, `Normalized comparison`, and `Normalized diff command`
 - explicit note that subsequent phases run from the worktree
+- the required `## TODO` heading from the scaffold
 
 ## Suggested Commands
 
@@ -99,6 +101,15 @@ Write the artifact to:
 Use feature branches named:
 
 - `recursive/<run-id>`
+
+## Routing Awareness
+
+If this skill uses delegated review or any other routed external model to validate worktree setup, baseline verification, or branch safety, re-read:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+immediately before choosing that CLI/model, and honor the routed policy or explicit fallback instead of hardcoding a reviewer model.
 
 ## Integration
 

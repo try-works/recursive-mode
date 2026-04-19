@@ -9,15 +9,30 @@ Read:
 - `.recursive/STATE.md`
 - `.recursive/DECISIONS.md`
 - `.recursive/memory/MEMORY.md`
+- `.recursive/config/recursive-router.json`
+- `.recursive/config/recursive-router-discovered.json`
 - `.recursive/run/{{RUN_ID}}/00-requirements.md`
+- `benchmark/recursive-skills/`
 
 Rules:
 
 - Treat the bootstrapped recursive control-plane files in this repo as the recursive-mode skill for this benchmark run.
 - Use the recursive-mode scaffold already present in the repo.
+- Before any delegated audit, review, or other external model/subagent call, re-read `.recursive/config/recursive-router.json` and `.recursive/config/recursive-router-discovered.json` from disk and follow that routed policy instead of inventing or hardcoding a CLI/model.
+- When the router config contains enabled external-cli routes, use at least one bounded delegated call for each relevant routed stage you reach (for example planner during planning, code-reviewer or tester during verification, and memory-auditor during closeout). Record the CLI/model used in the corresponding artifact or benchmark log.
+- If planner is routed, make a bounded planner call during Phase 2 before locking `02-to-be-plan.md`. If code-reviewer or tester is routed, use one of those routed roles during verification or repair before locking the relevant audited stage. If memory-auditor is routed, use it during Phase 8. Do not defer all routed delegation until the end merely to save time.
+- Timeout or latency by itself is not a valid override reason for skipping a configured routed stage. Only skip a routed stage after you confirm the route is disabled, unavailable in `.recursive/config/recursive-router-discovered.json`, or an attempted routed call fails, and record that concrete reason in the artifact and benchmark log.
+- Use `python scripts/recursive-router-invoke.py` (or the `.ps1` wrapper) for routed calls and immediately write the matching durable action record with `python scripts/recursive-subagent-action.py` (or `.ps1`) under `.recursive/run/{{RUN_ID}}/subagents/`.
+- Treat yourself as the orchestrator for this run. Delegated roles may help with bounded analysis, planning, review, testing, or repair work, but you remain responsible for fixing any issues in their output and carrying the audit-repair loop through every required gate.
+- Do not hand off final acceptance to another role. Finish only when you have personally rechecked the delegated outputs, repaired remaining defects, and the run is fully gate-passing.
+- At the start of each phase, re-read `.recursive/RECURSIVE.md` and the current phase inputs, then follow that phase's exact required sections, audit loop, lint expectations, and lock rules before you edit or lock the artifact.
+- `benchmark/recursive-skills/` contains benchmark-local copies of the recursive skill docs. Re-read the phase-relevant ones from there before worktree setup, routed delegation, delegated review, TDD decisions, or debugging/repair loops instead of relying on memory alone.
+- The orchestrator must enforce stage gating exactly like the main recursive workflow: draft or repair the current stage artifact, run strict recursive lint for run `{{RUN_ID}}`, fix the current-stage findings, and only then lock that artifact and advance to the next stage.
+- Do not carry current-stage lint debt forward. If strict lint reports failures in the stage you are working on, repair them before starting the next audited phase. Warnings about not-yet-reached later artifacts are acceptable; stage-local failures are not.
+- Do not start Phase 2 until `01-as-is.md` is lint-valid and locked. Do not start Phase 3 until `02-to-be-plan.md` is lint-valid and locked. Do not advance to later audited phases until the immediately preceding audited artifact is lint-valid and locked by the orchestrator.
 - A lint-shaped draft template pack is available under `benchmark/recursive-templates/`. Copy the matching template files into `.recursive/run/{{RUN_ID}}/` and replace every `TODO` placeholder instead of inventing new headings or field names from scratch.
 - The controller also seeded `.recursive/run/{{RUN_ID}}/evidence/logs/baseline/`, `.recursive/run/{{RUN_ID}}/evidence/logs/green/`, `.recursive/run/{{RUN_ID}}/evidence/manual/`, and `.recursive/run/{{RUN_ID}}/evidence/screenshots/`. Use those exact directories for audited-phase evidence.
-- Before locking any recursive artifact, remove the template `## TODO` section entirely after you have incorporated its checklist items. Locked artifacts may keep the completed content, but they must not retain the literal `## TODO` heading.
+- Keep the required `## TODO` heading in every lint-scaffolded artifact. Replace placeholder checklist items with completed `[x]` entries or explicit remaining tasks, but do not delete the `## TODO` section just because the checklist is complete.
 - Match lint-required section headings exactly, including `## Changes Applied` and `## Failures and Diagnostics (if any)`.
 - The expected implementation root for this run is `{{EXPECTED_PRODUCT_ROOT}}` relative to the repository root.
 - Use recursive worktree isolation for the run when the control-plane docs require it, and record the chosen location clearly in `00-worktree.md`.
@@ -61,7 +76,8 @@ Rules:
 - Product-quality details matter in this fixture: persist memory and history state, make the memory register visible in the UI, and ensure history entries restore a reusable expression/result rather than a non-editable transcript.
 - Product-quality details also matter here: handle keyboard input at the document/app level so digits, operators, Enter, Backspace, and Escape work without requiring hidden-container focus; make `CE` and sign-toggle behave on the active entry/operand; restore reusable expressions from history; parse exponentiation right-associatively; reject unknown characters visibly; and consume the full expression instead of silently ignoring trailing junk.
 - Include responsive layout signals that the controller can detect, such as a grid-based calculator shell with `max-width`, explicit `grid-template-columns` or `minmax(...)`, and at least one small-screen `@media` rule.
-- Keep a benchmark progress log in `benchmark/agent-log.md` inside the product root.
+- Keep the authoritative product-side benchmark progress log in `{{EXPECTED_PRODUCT_ROOT}}/benchmark/agent-log.md`.
+- Treat the repo-root `benchmark/agent-log.md`, `benchmark/benchmark-context.json`, `benchmark/expected-product-root.txt`, `benchmark/run-id.txt`, and `benchmark/recursive-templates/` as controller metadata, not product implementation files, unless the current diff truly includes them.
 - If the product root differs from the repository root, keep the product-root log authoritative and add a short repo-root `benchmark/agent-log.md` pointer or mirrored summary so controller-side review can find the real progress log quickly.
 - Each log entry should include a UTC timestamp, what you tried, issues met, and whether build/test/preview status changed.
 - If the controller provides a hint during the benchmark, append it to `benchmark/hints.md` with a UTC timestamp and a short note about what changed afterward.

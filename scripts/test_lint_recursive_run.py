@@ -89,5 +89,14 @@ class LintRecursiveRunTests(unittest.TestCase):
 
         self.assertEqual([".worktrees/benchmark-test-run/src/lib.rs"], filtered)
 
+    def test_requirements_artifact_no_longer_requires_assumptions_section(self) -> None:
+        sections = lint.get_artifact_required_sections("00-requirements.md", "recursive-mode-audit-v2")
+
+        self.assertNotIn("Assumptions", sections)
+        self.assertEqual(
+            ["TODO", "Requirements", "Out of Scope", "Constraints", "Coverage Gate", "Approval Gate"],
+            sections,
+        )
+
 if __name__ == "__main__":
     unittest.main()

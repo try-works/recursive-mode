@@ -46,17 +46,54 @@ function Ensure-File {
   }
 }
 
+function Ensure-GitIgnoreLine {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepoRoot,
+    [Parameter(Mandatory = $true)][string]$Line
+  )
+
+  $gitIgnorePath = Join-Path $RepoRoot ".gitignore"
+  $normalizedLine = $Line.Trim()
+  $existing = ""
+  if (Test-Path -LiteralPath $gitIgnorePath) {
+    $existing = Get-Content -LiteralPath $gitIgnorePath -Raw -Encoding UTF8
+    if ($null -eq $existing) {
+      $existing = ""
+    }
+  }
+
+  $existingLines = if ($existing) { $existing -split "`r?`n" } else { @() }
+  foreach ($candidate in $existingLines) {
+    if ($candidate.Trim() -eq $normalizedLine) {
+      Write-Output "[OK] File already up to date: $gitIgnorePath"
+      return
+    }
+  }
+
+  $updated = $existing
+  if ($updated -and -not $updated.EndsWith("`n")) {
+    $updated += "`n"
+  }
+  $updated += "$normalizedLine`n"
+  Write-Utf8NoBom -Path $gitIgnorePath -Content $updated
+  if ($existing) {
+    Write-Output "[OK] Updated file: $gitIgnorePath"
+  } else {
+    Write-Output "[OK] Created file: $gitIgnorePath"
+  }
+}
+
 function Resolve-CanonicalWorkflowPath {
   param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
   $candidates = @(
-    (Join-Path (Join-Path $SkillRoot "references") "bootstrap\RECURSIVE.md"),
-    (Join-Path (Join-Path $SkillRoot ".recursive") "RECURSIVE.md")
+    (Join-Path (Join-Path $SkillRoot ".recursive") "RECURSIVE.md"),
+    (Join-Path (Join-Path $SkillRoot "references") "bootstrap\RECURSIVE.md")
   )
 
   foreach ($candidate in $candidates) {
     if (Test-Path -LiteralPath $candidate) {
-      Write-Output "[INFO] Using canonical workflow template: $candidate"
+      Write-Host "[INFO] Using canonical workflow template: $candidate"
       return $candidate
     }
   }
@@ -146,6 +183,112 @@ function Sync-PlainFile {
     Write-Output "[OK] Updated file: $Path"
   } else {
     Write-Output "[OK] File already up to date: $Path"
+  }
+}
+
+function Get-RecursiveRouterPolicyJson {
+  @'
+{
+  "version": 1,
+  "defaults": {
+    "when_role_unconfigured": "ask",
+    "when_cli_unavailable": "fallback-local",
+    "when_model_unknown": "ask",
+    "allow_auto_assign_if_single_cli": false,
+    "probe_timeout_ms": 50000,
+    "invoke_timeout_ms": 180000
+  },
+  "role_routes": {
+    "orchestrator": {
+      "enabled": true,
+      "mode": "local-only",
+      "cli": null,
+      "model": null,
+      "fallback": "local-controller"
+    },
+    "analyst": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "planner": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "implementer": {
+      "enabled": false,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "local-controller"
+    },
+    "code-reviewer": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "memory-auditor": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "tester": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    }
+  },
+  "cli_overrides": {},
+  "custom_clis": []
+}
+'@
+}
+
+function Ensure-RouterConfigScaffold {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+  $configRoot = Join-Path (Join-Path $RepoRoot ".recursive") "config"
+  $policyPath = Join-Path $configRoot "recursive-router.json"
+  $discoveryPath = Join-Path $configRoot "recursive-router-discovered.json"
+  $legacyPolicyPath = Join-Path $configRoot "recursive-router-cli.json"
+  $legacyDiscoveryPath = Join-Path $configRoot "recursive-router-cli-discovered.json"
+
+  Ensure-Directory -Path $configRoot
+  if (Test-Path -LiteralPath $policyPath) {
+    try {
+      $null = (Get-Content -LiteralPath $policyPath -Raw -Encoding UTF8) | ConvertFrom-Json
+    } catch {
+      throw "Existing routing policy is invalid JSON and will not be overwritten: $policyPath"
+    }
+  } elseif (Test-Path -LiteralPath $legacyPolicyPath) {
+    try {
+      $legacyPolicyRaw = Get-Content -LiteralPath $legacyPolicyPath -Raw -Encoding UTF8
+      $null = $legacyPolicyRaw | ConvertFrom-Json
+    } catch {
+      throw "Existing legacy routing policy is invalid JSON and will not be migrated: $legacyPolicyPath"
+    }
+    Write-Utf8NoBom -Path $policyPath -Content $legacyPolicyRaw
+    Remove-Item -LiteralPath $legacyPolicyPath -Force
+    Write-Output "[OK] Migrated legacy router policy: $policyPath"
+  } else {
+    Write-Utf8NoBom -Path $policyPath -Content (Get-RecursiveRouterPolicyJson)
+    Write-Output "[OK] Created file: $policyPath"
+  }
+
+  if ((-not (Test-Path -LiteralPath $discoveryPath)) -and (Test-Path -LiteralPath $legacyDiscoveryPath)) {
+    Move-Item -LiteralPath $legacyDiscoveryPath -Destination $discoveryPath -Force
+    Write-Output "[OK] Migrated legacy router discovery: $discoveryPath"
   }
 }
 
@@ -455,8 +598,11 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/references/artifact-template.md`
   - `/scripts/lint-recursive-run.py`
   - `/scripts/recursive-status.py`
-- Working on delegated review or subagent behavior:
+- Working on delegated review, subagent behavior, or routed CLI delegation:
   - `/.recursive/memory/skills/SKILLS.md`
+  - `/.recursive/config/recursive-router.json`
+  - `/.recursive/config/recursive-router-discovered.json`
+  - `/skills/recursive-router/SKILL.md`
   - `/skills/recursive-subagent/SKILL.md`
   - `/skills/recursive-review-bundle/SKILL.md`
 - Working on memory behavior:
@@ -516,6 +662,10 @@ Audit delegation rule:
 
 - If subagents are available and the audit/review context bundle is complete, delegated audit/review is the default path.
 - If the controller still chooses `self-audit`, record a concrete `Delegation Override Reason` in the audited phase artifact.
+
+Router rule:
+
+- If the user asks to route delegated work through another transport/model, configure or inspect `/.recursive/config/recursive-router.json`, refresh `/.recursive/config/recursive-router-discovered.json`, and use `recursive-router` before dispatching the delegated role.
 '@
 }
 
@@ -532,6 +682,7 @@ $agentRoot = Join-Path $resolvedRepoRoot ".agent"
 $memoryRoot = Join-Path $recursiveRoot "memory"
 $skillMemoryRoot = Join-Path $memoryRoot "skills"
 $runRoot = Join-Path $recursiveRoot "run"
+$configRoot = Join-Path $recursiveRoot "config"
 
 $recursivePath = Join-Path $recursiveRoot "RECURSIVE.md"
 $recursiveAgentsPath = Join-Path $recursiveRoot "AGENTS.md"
@@ -561,6 +712,7 @@ Ensure-Directory -Path $agentRoot
 Ensure-Directory -Path $memoryRoot
 Ensure-Directory -Path $skillMemoryRoot
 Ensure-Directory -Path $runRoot
+Ensure-Directory -Path $configRoot
 foreach ($subdir in @("domains", "patterns", "incidents", "episodes", "archive")) {
   $full = Join-Path $memoryRoot $subdir
   Ensure-Directory -Path $full
@@ -596,6 +748,8 @@ Ensure-File -Path $delegatedVerificationPath -Content (Get-DelegatedVerification
 Ensure-File -Path $phase8SkillMemoryPath -Content (Get-Phase8SkillMemoryDoc)
 Ensure-File -Path $codexAgentsPath -Content "# AGENTS.md`n"
 Ensure-File -Path $plansPath -Content "# PLANS.md`n"
+Ensure-GitIgnoreLine -RepoRoot $resolvedRepoRoot -Line "/.recursive/config/recursive-router-discovered.json"
+Ensure-RouterConfigScaffold -RepoRoot $resolvedRepoRoot
 
 Upsert-MarkedBlock `
   -FilePath $recursiveAgentsPath `

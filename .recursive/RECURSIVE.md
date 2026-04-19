@@ -297,6 +297,28 @@ If repairs materially change the reviewed scope, refresh the bundle before re-au
 `recursive-review-bundle` auto-discovers relevant addenda by default. Do not silently omit them from delegated review context.
 The written Phase 3.5 review must cite the bundle path plus bundle-grounded upstream artifacts, relevant addenda, and changed files or code references in the review narrative, not only in metadata boilerplate.
 
+## Canonical router policy for delegated model calls
+
+Canonical routing files live under:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+When the controller or any recursive subskill is about to call another model or external CLI for delegated audit, review, bounded implementation, or other routed subagent work, it must re-read the routing policy and discovery inventory from disk immediately before choosing the CLI/model.
+
+Do not rely on stale chat context, earlier prompt text, or previously remembered route selections when these files may have changed during the run.
+
+If routed delegation has been requested or the current task is already operating under routed policy, prefer the canonical `recursive-router` resolve/invoke path over hardcoded provider or model strings.
+
+If the effective route is unresolved, blocked, or falls back to `self-audit` or local execution, record that outcome explicitly in the phase artifact or subagent action record instead of silently bypassing routing.
+
+When routed delegation is used, the relevant phase artifact, review bundle, or action record should cite:
+
+- `Routing Config Path`
+- `Routing Discovery Path`
+- `Routed CLI`
+- `Routed Model`
+
 ## Canonical subagent action records
 
 Any meaningful subagent invocation must leave a durable action record under:
@@ -465,6 +487,7 @@ Phase 3.5 — Code Review (optional but fully audited when present)
 - Output: `03.5-code-review.md`
 - **Use when:** High-risk changes, complex sub-phases, or extra confidence needed
 - Delegated review is valid only with the full context bundle
+- Before delegated dispatch, re-read `/.recursive/config/recursive-router.json` and `/.recursive/config/recursive-router-discovered.json` as required by `## Canonical router policy for delegated model calls`
 - Prefer a canonical review bundle under `/.recursive/run/<run-id>/evidence/review-bundles/` and record its path in the phase artifact
 - `## Changed Files Reviewed` must not be empty, and `## Targeted Code References` should overlap the changed-file scope being reviewed
 - Audit must explicitly review requirements, plan alignment, product/worktree diff ownership, code quality, test adequacy, and TDD compliance

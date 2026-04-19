@@ -84,9 +84,3 @@ Acceptance criteria:
 - The project must run from a disposable temp folder.
 - Do not require any external service beyond standard Rust tooling and local package installation.
 - Keep the app suitable for later browser-agent screenshot validation.
-
-## Assumptions
-
-- Rust, cargo, and rustup are available in the benchmark environment.
-- The benchmark harness may install or prepare Trunk and the `wasm32-unknown-unknown` target before the coding agent starts.
-- The coding agent may add helper modules, tests, and styles as needed.

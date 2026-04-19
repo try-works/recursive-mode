@@ -2186,7 +2186,6 @@ def get_artifact_required_sections(file_name: str, workflow_profile: str) -> lis
             "Requirements",
             "Out of Scope",
             "Constraints",
-            "Assumptions",
             "Coverage Gate",
             "Approval Gate",
         ],

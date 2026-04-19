@@ -341,6 +341,25 @@ class SmokeHarness:
         if "should use the packaged benchmark fixture" in plans_bridge:
             raise SmokeError("Default recursive-mode bootstrap still assumes benchmark fixtures are present in .agent/PLANS.md.")
 
+        router_policy_path = self.repo_root / ".recursive" / "config" / "recursive-router.json"
+        router_discovery_path = self.repo_root / ".recursive" / "config" / "recursive-router-discovered.json"
+        gitignore_path = self.repo_root / ".gitignore"
+        if not router_policy_path.exists():
+            raise SmokeError("Default recursive-mode bootstrap did not create /.recursive/config/recursive-router.json.")
+        if router_discovery_path.exists():
+            raise SmokeError("Default recursive-mode bootstrap should not create /.recursive/config/recursive-router-discovered.json before probe.")
+        if not gitignore_path.exists():
+            raise SmokeError("Default recursive-mode bootstrap did not create .gitignore for device-local router discovery state.")
+        gitignore = gitignore_path.read_text(encoding="utf-8")
+        if "/.recursive/config/recursive-router-discovered.json" not in gitignore:
+            raise SmokeError("Default recursive-mode bootstrap did not gitignore /.recursive/config/recursive-router-discovered.json.")
+        self.run_command(
+            self.python_command("recursive-router-probe.py", "--repo-root", str(self.repo_root), "--json"),
+            cwd=self.repo_root,
+        )
+        if not router_discovery_path.exists():
+            raise SmokeError("recursive-router probe did not create /.recursive/config/recursive-router-discovered.json.")
+
         self.run_command([str(self.python_exe), "-m", "unittest", "-q"], cwd=self.repo_root)
         self.git("add", "-A")
         self.git("commit", "-m", "Base tiny tasks app with recursive-mode scaffold")
@@ -949,10 +968,6 @@ class SmokeHarness:
 
                         - Use only the Python standard library.
                         - Keep the fixture limited to `tiny_tasks.py` and `test_tiny_tasks.py`.
-
-                        ## Assumptions
-
-                        - The disposable repo may keep run artifacts uncommitted while product files remain in the working tree.
                         """
                     ),
                     self.gate_section("Coverage Gate", "Coverage", "R1 and its acceptance criteria are fully specified."),

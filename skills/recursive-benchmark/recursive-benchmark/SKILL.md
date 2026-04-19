@@ -11,6 +11,8 @@ The benchmark should use the same project requirements, the same model family, a
 
 For fairness, the recursive-off arm should receive controller guidance only in the chat prompt, not as benchmark requirement, rubric, or prompt documents inside its repo or benchmark workspace.
 
+Current maintained benchmark runners are Codex CLI, Kimi CLI, and OpenCode CLI. For OpenCode, prefer provider-qualified model ids and use the dedicated CLI binary rather than the desktop wrapper.
+
 ## Primary Use Case
 
 Use `recursive-benchmark` when the user wants to:
@@ -31,7 +33,7 @@ For each benchmark run:
 1. Create paired disposable repos for `recursive-off` and `recursive-on`.
 2. Give both repos the same benchmark project requirements.
 3. Bootstrap recursive-mode only in the recursive-on repo and place the benchmark requirements in a run-local, recursive-compliant `00-requirements.md`.
-4. Prompt the recursive-on arm to read `/.recursive/RECURSIVE.md`, the bridge docs, and the run requirements before implementing the run.
+4. Prompt the recursive-on arm to read `/.recursive/RECURSIVE.md`, the bridge docs, the router config files, and the run requirements before implementing the run.
 5. Record the runner, provider family, model string, and timeout budget.
 6. Execute the selected agent runtime non-interactively for both arms.
 7. Run a mandatory controller-side judge review for every completed arm, preferring `gpt-5.4` and falling back to a fresh instance of the benchmarked model when needed.
@@ -111,11 +113,13 @@ The benchmark should produce a final report that includes:
 - It should not use hidden benchmark-specific criteria that are absent from the packaged rubric.
 - It should not require external services such as a database server.
 
+When the recursive-on arm uses delegated audit, review, or other external model help, the benchmark prompt should require it to re-read `/.recursive/config/recursive-router.json` and `/.recursive/config/recursive-router-discovered.json` immediately before choosing the delegated CLI/model.
+
 ## References
 
 - `./references/patterns.md`
-- `../../references/benchmarks/README.md`
-- `../../references/benchmarks/local-first-planner/README.md`
-- `../../references/benchmarks/local-first-planner/00-requirements.md`
-- `../../references/benchmarks/local-first-planner/scoring-rubric.md`
-- `../../scripts/run-recursive-benchmark.py`
+- `/references/benchmarks/README.md`
+- `/references/benchmarks/local-first-planner/README.md`
+- `/references/benchmarks/local-first-planner/00-requirements.md`
+- `/references/benchmarks/local-first-planner/scoring-rubric.md`
+- `./scripts/run-recursive-benchmark.py`

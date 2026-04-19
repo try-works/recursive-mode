@@ -88,6 +88,18 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `scripts/lint-recursive-run.ps1`
 - `scripts/recursive-review-bundle.py`
 - `scripts/recursive-review-bundle.ps1`
+- `scripts/recursive-router-init.py`
+- `scripts/recursive-router-init.ps1`
+- `scripts/recursive-router-probe.py`
+- `scripts/recursive-router-probe.ps1`
+- `scripts/recursive-router-configure.py`
+- `scripts/recursive-router-configure.ps1`
+- `scripts/recursive-router-invoke.py`
+- `scripts/recursive-router-invoke.ps1`
+- `scripts/recursive-router-resolve.py`
+- `scripts/recursive-router-resolve.ps1`
+- `scripts/recursive-router-validate.py`
+- `scripts/recursive-router-validate.ps1`
 - `scripts/recursive-subagent-action.py`
 - `scripts/recursive-subagent-action.ps1`
 - `scripts/recursive-lock.py`
@@ -104,9 +116,23 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `skills/recursive-debugging/SKILL.md`
 - `skills/recursive-tdd/SKILL.md`
 - `skills/recursive-review-bundle/SKILL.md`
+- `skills/recursive-router/SKILL.md`
 - `skills/recursive-subagent/SKILL.md`
 
 Use those subskills for their specialized discipline, but keep `/.recursive/RECURSIVE.md` as the single source of truth for the overall workflow contract.
+
+Canonical routed CLI config lives under:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+## Router-aware delegated execution
+
+When this skill or any recursive subskill is about to call another model or external CLI for delegated audit, review, bounded implementation, or other routed subagent work, re-read these routing files from disk immediately before choosing the CLI/model.
+
+Do not hardcode provider or model strings for routed delegation when repo policy already defines the route or fallback behavior.
+
+If routed delegation is in scope, prefer `skills/recursive-router/SKILL.md` plus the canonical `recursive-router-resolve` and `recursive-router-invoke` scripts over bespoke model selection logic.
 
 ## Optional add-on
 

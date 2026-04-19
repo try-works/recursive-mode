@@ -25,6 +25,18 @@ param(
     [string[]]$Finding = @(),
     [string[]]$VerificationPath = @(),
     [string[]]$VerificationItem = @(),
+    [string]$RouterUsed = "",
+    [string]$RoutedRole = "",
+    [string]$RoutedCli = "",
+    [string]$RoutedModel = "",
+    [string]$RoutingConfigPath = "",
+    [string]$RoutingDiscoveryPath = "",
+    [string]$RoutingResolutionBasis = "",
+    [string]$RoutingFallbackReason = "",
+    [string]$CliProbeSummary = "",
+    [string]$PromptBundlePath = "",
+    [string]$InvocationExitCode = "",
+    [string[]]$OutputCapturePath = @(),
     [string]$OutputName = ""
 )
 
@@ -52,6 +64,17 @@ if ($ArtifactPath) { $argsList += @("--artifact-path", $ArtifactPath) }
 if ($ReviewBundle) { $argsList += @("--review-bundle", $ReviewBundle) }
 if ($DiffBasis) { $argsList += @("--diff-basis", $DiffBasis) }
 if ($OutputName) { $argsList += @("--output-name", $OutputName) }
+if ($RouterUsed) { $argsList += @("--router-used", $RouterUsed) }
+if ($RoutedRole) { $argsList += @("--routed-role", $RoutedRole) }
+if ($RoutedCli) { $argsList += @("--routed-cli", $RoutedCli) }
+if ($RoutedModel) { $argsList += @("--routed-model", $RoutedModel) }
+if ($RoutingConfigPath) { $argsList += @("--routing-config-path", $RoutingConfigPath) }
+if ($RoutingDiscoveryPath) { $argsList += @("--routing-discovery-path", $RoutingDiscoveryPath) }
+if ($RoutingResolutionBasis) { $argsList += @("--routing-resolution-basis", $RoutingResolutionBasis) }
+if ($RoutingFallbackReason) { $argsList += @("--routing-fallback-reason", $RoutingFallbackReason) }
+if ($CliProbeSummary) { $argsList += @("--cli-probe-summary", $CliProbeSummary) }
+if ($PromptBundlePath) { $argsList += @("--prompt-bundle-path", $PromptBundlePath) }
+if ($InvocationExitCode) { $argsList += @("--invocation-exit-code", $InvocationExitCode) }
 
 foreach ($value in @($UpstreamArtifact)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--upstream-artifact", $piece.Trim()) } } }
 foreach ($value in @($Addendum)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--addendum", $piece.Trim()) } } }
@@ -69,6 +92,7 @@ foreach ($value in @($EvidenceUsed)) { foreach ($piece in ($value -split ",")) {
 foreach ($value in @($Finding)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--finding", $piece.Trim()) } } }
 foreach ($value in @($VerificationPath)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--verification-path", $piece.Trim()) } } }
 foreach ($value in @($VerificationItem)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--verification-item", $piece.Trim()) } } }
+foreach ($value in @($OutputCapturePath)) { foreach ($piece in ($value -split ",")) { if ($piece.Trim()) { $argsList += @("--output-capture-path", $piece.Trim()) } } }
 
 & $python @argsList
 exit $LASTEXITCODE

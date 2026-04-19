@@ -40,4 +40,8 @@ Audit delegation rule:
 
 - If subagents are available and the audit/review context bundle is complete, delegated audit/review is the default path.
 - If the controller still chooses `self-audit`, record a concrete `Delegation Override Reason` in the audited phase artifact.
+
+Router rule:
+
+- If the user asks to route delegated work through another transport/model, configure or inspect `/.recursive/config/recursive-router.json`, refresh `/.recursive/config/recursive-router-discovered.json`, re-read both immediately before choosing the delegated CLI/model, and use `recursive-router` before dispatching the delegated role.
 <!-- RECURSIVE-MODE-PLANS-BRIDGE:END -->

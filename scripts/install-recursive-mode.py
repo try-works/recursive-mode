@@ -8,6 +8,8 @@ Behavior is shared with install-recursive-mode.ps1:
 - creates a lightweight .recursive/AGENTS.md router for internal doc discovery
 - upserts the primary Codex AGENTS bridge into .codex/AGENTS.md
 - upserts the primary Codex plans bridge into .agent/PLANS.md
+- ensures the routed delegation policy scaffold exists under .recursive/config/
+- adds the device-local router discovery inventory to .gitignore
 - mirrors the AGENTS bridge into repo-root AGENTS.md when that file already exists
 - preserves unrelated existing file content
 """
@@ -16,7 +18,14 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from recursive_router_lib import RouterConfigError, ensure_router_scaffold
 
 
 def write_utf8_no_bom(path: Path, content: str) -> None:
@@ -41,10 +50,27 @@ def ensure_file(path: Path, content: str) -> None:
         print(f"[OK] File exists: {path}")
 
 
+def ensure_gitignore_line(repo_root: Path, line: str) -> None:
+    gitignore_path = repo_root / ".gitignore"
+    normalized_line = line.strip()
+    existing = gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else ""
+    existing_lines = existing.splitlines()
+    if any(candidate.strip() == normalized_line for candidate in existing_lines):
+        print(f"[OK] File already up to date: {gitignore_path}")
+        return
+    updated = existing
+    if updated and not updated.endswith("\n"):
+        updated += "\n"
+    updated += normalized_line + "\n"
+    write_utf8_no_bom(gitignore_path, updated)
+    action = "Updated" if existing else "Created"
+    print(f"[OK] {action} file: {gitignore_path}")
+
+
 def resolve_canonical_workflow_path(skill_root: Path) -> Path:
     candidates = [
-        skill_root / "references" / "bootstrap" / "RECURSIVE.md",
         skill_root / ".recursive" / "RECURSIVE.md",
+        skill_root / "references" / "bootstrap" / "RECURSIVE.md",
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -397,8 +423,11 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/references/artifact-template.md`
   - `/scripts/lint-recursive-run.py`
   - `/scripts/recursive-status.py`
-- Working on delegated review or subagent behavior:
+- Working on delegated review, subagent behavior, or routed CLI delegation:
   - `/.recursive/memory/skills/SKILLS.md`
+  - `/.recursive/config/recursive-router.json`
+  - `/.recursive/config/recursive-router-discovered.json`
+  - `/skills/recursive-router/SKILL.md`
   - `/skills/recursive-subagent/SKILL.md`
   - `/skills/recursive-review-bundle/SKILL.md`
 - Working on memory behavior:
@@ -457,6 +486,10 @@ Audit delegation rule:
 
 - If subagents are available and the audit/review context bundle is complete, delegated audit/review is the default path.
 - If the controller still chooses `self-audit`, record a concrete `Delegation Override Reason` in the audited phase artifact.
+
+Router rule:
+
+- If the user asks to route delegated work through another transport/model, configure or inspect `/.recursive/config/recursive-router.json`, refresh `/.recursive/config/recursive-router-discovered.json`, and use `recursive-router` before dispatching the delegated role.
 """
 
 
@@ -481,6 +514,7 @@ def main() -> None:
     codex_root = repo_root / ".codex"
     memory_root = recursive_root / "memory"
     run_root = recursive_root / "run"
+    config_root = recursive_root / "config"
     agent_root = repo_root / ".agent"
 
     recursive_path = recursive_root / "RECURSIVE.md"
@@ -512,6 +546,7 @@ def main() -> None:
     ensure_directory(memory_root)
     ensure_directory(skill_memory_root)
     ensure_directory(run_root)
+    ensure_directory(config_root)
     for subdir in ("domains", "patterns", "incidents", "episodes", "archive"):
         ensure_directory(memory_root / subdir)
         ensure_file(memory_root / subdir / ".gitkeep", "")
@@ -531,6 +566,11 @@ def main() -> None:
     ensure_file(phase8_skill_memory_path, phase8_skill_memory_doc())
     ensure_file(codex_agents_path, "# AGENTS.md\n")
     ensure_file(plans_path, "# PLANS.md\n")
+    ensure_gitignore_line(repo_root, "/.recursive/config/recursive-router-discovered.json")
+    try:
+        ensure_router_scaffold(repo_root)
+    except RouterConfigError as exc:
+        raise SystemExit(f"[FAIL] {exc}") from exc
 
     upsert_marked_block(
         recursive_agents_path,

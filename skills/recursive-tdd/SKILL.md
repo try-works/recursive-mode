@@ -220,11 +220,31 @@ If you encounter any of these, DELETE CODE and restart with TDD:
 
 ## Integration with recursive-mode Phase 3
 
+## Routing Awareness
+
+If TDD execution uses delegated review, test audit, or bounded routed implementation help, re-read:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+immediately before choosing the delegated CLI/model, and use the routed policy or explicit fallback rather than ad hoc model selection.
+
 ### Phase 3 Artifact TDD Section
 
 Every Phase 3 artifact must include:
 
 ```markdown
+## TODO
+
+- [ ] Replace every placeholder with concrete TDD evidence for the current implementation phase.
+
+## Audit Context
+
+Audit Execution Mode: self-audit / subagent
+Subagent Availability: available / unavailable
+Subagent Capability Probe: [what proved availability or unavailability]
+Delegation Decision Basis: [why self-audit or delegation was chosen]
+
 ## TDD Compliance Log
 
 TDD Mode: strict
@@ -250,6 +270,11 @@ GREEN Evidence:
 - GREEN: [timestamp] - Fix applied: [description]
 - REFACTOR: [timestamp] - N/A (minimal fix)
 - Final state: PASS - test passes, bug fixed
+
+## Requirement Completion Status
+
+- `R1` | `implemented` | Changed Files: `path/to/file`
+- `R1` | `verified` | Evidence: `/.recursive/run/<run-id>/evidence/logs/green/<file>.log`
 ```
 
 If strict mode cannot be followed, the artifact must include:

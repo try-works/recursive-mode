@@ -26,6 +26,7 @@ Installable entrypoints:
 - `/skills/recursive-debugging/SKILL.md`
 - `/skills/recursive-tdd/SKILL.md`
 - `/skills/recursive-review-bundle/SKILL.md`
+- `/skills/recursive-router/SKILL.md`
 - `/skills/recursive-subagent/SKILL.md`
 
 Optional add-on source:
@@ -42,6 +43,8 @@ The installer bootstraps the canonical layout in a target repo:
   RECURSIVE.md
   STATE.md
   DECISIONS.md
+  config/
+    recursive-router.json
   memory/
     MEMORY.md
     domains/
@@ -67,6 +70,8 @@ The installer bootstraps the canonical layout in a target repo:
 
 - `/.recursive/AGENTS.md` is a lightweight internal router/index
 - `/.recursive/RECURSIVE.md` remains the only workflow source of truth
+- `/.recursive/config/recursive-router.json` is the canonical user-editable routed delegation policy; when an agent updates it, use the router configure-and-verify path instead of saving unchecked bindings
+- `/.recursive/config/recursive-router-discovered.json` is generated locally after router probe or verification, should stay gitignored in target repos, and is not part of the bootstrapped scaffold
 - `references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
 
 ## Main Maintainer Commands
@@ -132,6 +137,7 @@ The benchmark add-on is intentionally not part of the default exported recursive
 ```bash
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all -Scenario local-first-planner
 ```
 

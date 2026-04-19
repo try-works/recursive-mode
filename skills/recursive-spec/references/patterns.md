@@ -123,10 +123,6 @@ Acceptance criteria:
 ## Constraints
 
 - ...
-
-## Assumptions
-
-- ...
 ```
 
 Useful adaptation patterns:
@@ -134,7 +130,7 @@ Useful adaptation patterns:
 - fixed architecture choice -> `## Constraints`
 - forbidden change area -> `## Constraints`
 - user explicitly defers a follow-up -> `## Out of Scope`
-- uncertainty that should be validated later -> `## Assumptions`
+- uncertainty that must be resolved before locking -> confirm it or convert it into a concrete requirement, constraint, or out-of-scope note
 
 ## Run Creation Rule
 

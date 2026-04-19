@@ -47,8 +47,11 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/references/artifact-template.md`
   - `/scripts/lint-recursive-run.py`
   - `/scripts/recursive-status.py`
-- Working on delegated review or subagent behavior:
+- Working on delegated review, subagent behavior, or routed CLI delegation:
   - `/.recursive/memory/skills/SKILLS.md`
+  - `/.recursive/config/recursive-router.json`
+  - `/.recursive/config/recursive-router-discovered.json`
+  - `/skills/recursive-router/SKILL.md`
   - `/skills/recursive-subagent/SKILL.md`
   - `/skills/recursive-review-bundle/SKILL.md`
 - Working on memory behavior:

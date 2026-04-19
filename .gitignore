@@ -26,6 +26,9 @@ htmlcov/
 # Local recursive worktrees
 .worktrees/
 
+# Device-local router discovery inventory
+/.recursive/config/recursive-router-discovered.json
+
 # Local benchmark runtime byproducts
 .playwright-mcp/
 .cargo-target-dir/

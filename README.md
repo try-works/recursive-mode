@@ -8,7 +8,7 @@ It gives an agent a file-backed workflow for requirements, planning, implementat
 
 - people who want a stricter, auditable agent workflow inside a repo
 - teams who want requirements and implementation evidence recorded in files
-- users who want installable subskills for requirements/spec authoring, worktrees, debugging, TDD, delegated review, and subagent support, plus an optional benchmarking add-on when needed
+- users who want installable subskills for requirements/spec authoring, worktrees, debugging, TDD, delegated review, routed external CLI delegation, and subagent support, plus an optional benchmarking add-on when needed
 
 ## What It Includes
 
@@ -20,6 +20,7 @@ This repo currently ships these default installable skills:
 - `recursive-debugging`
 - `recursive-tdd`
 - `recursive-review-bundle`
+- `recursive-router`
 - `recursive-subagent`
 
 Optional add-on source:
@@ -35,6 +36,7 @@ Optional add-on source:
 | `recursive-debugging` | Adds structured root-cause analysis before fixing bugs or failing tests. |
 | `recursive-tdd` | Enforces RED-GREEN-REFACTOR discipline for implementation work. |
 | `recursive-review-bundle` | Builds canonical review bundles for delegated Phase 3.5 review. |
+| `recursive-router` | Routes delegated subagent roles through configured external transports, CLIs, and models while preserving explicit fallback and controller verification. The current CLI/IDE/agent remains the orchestrator; routed CLIs only handle bounded delegated work with a real context bundle. Opt-in only: use it when the user explicitly asks to route or set up model/provider bindings. |
 | `recursive-subagent` | Helps delegate bounded implementation, audit, or review work and verify the results. |
 
 Optional add-on:
@@ -58,6 +60,9 @@ The workflow package includes functionality for:
 - running strict or pragmatic TDD with recorded RED/GREEN evidence
 - recording QA in explicit human, agent-operated, or hybrid modes
 - packaging delegated reviews into canonical review bundles
+- probing and resolving external transport/model routes for delegated subagent roles from `/.recursive/config/recursive-router.json` when the user explicitly asks to set up or use routing
+- dispatching real prompt bundles through the resolved routed CLI/model pair with a repo-supported invoke path instead of ad hoc helpers
+- recording machine-specific router launcher details in policy via `cli_overrides` or `custom_clis` when the working CLI entrypoint differs across operating systems, shells, or devices
 - recording and checking subagent contributions before they are accepted
 - updating decisions, state, and memory as part of closeout
 - maintaining reusable skill-memory and capability guidance over time
@@ -66,20 +71,21 @@ The workflow package includes functionality for:
 
 ```mermaid
 flowchart TD
-    A[Create run in /.recursive/run/<run-id>/] --> B[Phase 0-2: requirements, AS-IS, plan]
-    B --> C[Phase 3: implementation in isolated worktree]
-    C --> D[Phase 3.5: delegated review or self-audit]
-    D --> E[Phase 4: tests and verification]
-    E --> F[Phase 5: manual QA or agent-operated QA]
-    F --> G[Phase 6-8: decisions, state, memory closeout]
-    G --> H[Lock artifacts and verify locks]
-    H --> I[Future runs start with better context]
+    A[Create run in /.recursive/run/<run-id>/] --> B[Phase 0: requirements and worktree setup]
+    B --> C[Phase 1-2: AS-IS and plan]
+    C --> D[Phase 3: implementation in isolated worktree]
+    D --> E[Phase 3.5: delegated review or self-audit]
+    E --> F[Phase 4: tests and verification]
+    F --> G[Phase 5: manual QA or agent-operated QA]
+    G --> H[Phase 6-8: decisions, state, memory closeout]
+    H --> I[Lock artifacts and verify locks]
+    I --> J[Future runs start with better context]
 
-    B -. addenda update understanding .-> B
-    C -. draft -> audit -> repair -> re-audit .-> C
-    D -. main agent verifies delegated work .-> D
-    G -. durable lessons promoted into memory .-> I
-    I -. prior decisions, state, memory reread .-> B
+    C -. addenda update understanding .-> C
+    D -. draft -> audit -> repair -> re-audit .-> D
+    E -. main agent verifies delegated work .-> E
+    H -. durable lessons promoted into memory .-> J
+    J -. prior decisions, state, memory reread .-> C
 ```
 
 At a high level, the workflow turns a task into a durable run, moves that run through audited phases, and then feeds validated outcomes back into decisions, state, and memory so later runs start from better context.
@@ -206,13 +212,14 @@ bash "<SKILL_DIR>/scripts/install-recursive-mode.sh" --repo-root .
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/install-recursive-mode.ps1" -RepoRoot .
 ```
 
-That creates the reusable `/.recursive/` scaffold, bridge docs, memory routers, and run layout used by the workflow.
+That creates the reusable `/.recursive/` scaffold, bridge docs, memory routers, routed delegation policy scaffold, and run layout used by the workflow.
 The bundled installer carries its own canonical workflow template, so bootstrap works from the installed skill package even when hidden repo directories are not present in the package layout.
 
 Important boundary:
 
 - `npx skills add ...` installs the skill package into agent directories
 - the target repo scaffold should then be created automatically on first recursive-mode use
+- the target repo scaffold includes `/.recursive/config/recursive-router.json`; `/.recursive/config/recursive-router-discovered.json` is created locally after router probe or verification and should stay gitignored on that device
 - the large benchmark fixture set is intentionally excluded from the default exported recursive-mode package and should be installed separately only when benchmarking is requested
 - Python and Bash are first-class bootstrap paths, so macOS and Linux users do not need PowerShell
 - if your runtime supports session-start hooks, the templates under `docs/templates/hooks/` can auto-bootstrap the scaffold at session start
@@ -240,7 +247,9 @@ The packaged benchmark set uses React + TypeScript + Vite projects that:
 - requires no database or external server
 - is suitable for build/test/preview validation and later screenshot review
 
-The benchmark harness creates paired repos for `recursive-off` and `recursive-on`, bootstraps the recursive-mode scaffold into the recursive-on repo, records the selected runner and model, enforces a timeout budget, evaluates build/test/preview outcomes, supports GitHub Copilot CLI, Codex CLI, and Kimi CLI, runs a mandatory controller-side judge review for every completed arm with `gpt-5.4` when available and the benchmarked model as fallback, writes per-arm progress files so live status can be inferred from workspace changes, keeps repo-local `.benchmark-workspaces/` ignored, and writes a markdown scoreboard report that separates runner health from product outcome, reports whether the recursive-on arm actually completed the recursive run artifact set, surfaces the recursive-on worktree isolation decision from `00-worktree.md`, supports timestamp fallback evidence, applies optional hint penalties, embeds screenshots when available, and includes a combined benchmark score that blends heuristic rubric coverage (70%) with the judge metric (30%).
+The benchmark harness creates paired repos for `recursive-off` and `recursive-on`, bootstraps the recursive-mode scaffold into the recursive-on repo, records the selected runner and model, enforces a timeout budget, evaluates build/test/preview outcomes, supports Codex CLI, Kimi CLI, and OpenCode CLI, runs a mandatory controller-side judge review for every completed arm with `gpt-5.4` when available and the benchmarked model as fallback, writes per-arm progress files so live status can be inferred from workspace changes, keeps repo-local `.benchmark-workspaces/` ignored, and writes a markdown scoreboard report that separates runner health from product outcome, reports whether the recursive-on arm actually completed the recursive run artifact set, surfaces the recursive-on worktree isolation decision from `00-worktree.md`, supports timestamp fallback evidence, applies optional hint penalties, embeds screenshots when available, and includes a combined benchmark score that blends heuristic rubric coverage (70%) with the judge metric (30%).
+
+For OpenCode benchmarking, the harness accepts provider-qualified model ids such as `opencode/gpt-5-nano` and discovers the CLI from `OPENCODE_CLI_PATH`, PATH, or the verified Windows fallback path `D:\opencode\opencode-cli.exe`.
 
 Packaged scenario tiers:
 
@@ -257,6 +266,7 @@ Maintainer entrypoints:
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
 python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner codex --scenario scientific-calculator-rust
+python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all
 ```
 

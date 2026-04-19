@@ -68,7 +68,7 @@ Recommended sequence:
 5. Observable acceptance criteria for each requirement
 6. Edge cases, failure paths, and exclusions
 7. Constraints, fixed decisions, and boundaries
-8. Assumptions or open unknowns
+8. Open unknowns that must be resolved before Phase 0 is locked
 
 Prefer proposing draft wording and asking the user to confirm or correct it rather than asking the user to author the whole document from scratch.
 
@@ -93,10 +93,11 @@ The finished output should become:
 
 Use the repository's native Phase 0 requirements structure:
 
+- keep the scaffolded header from `recursive-init`, including Workflow version: `recursive-mode-audit-v2`
+- keep the required `## TODO` section and replace placeholder checklist items rather than deleting the heading
 - `## Requirements`
 - `## Out of Scope`
 - `## Constraints`
-- `## Assumptions`
 
 Within `## Requirements`, each `R#` should include:
 
@@ -115,6 +116,15 @@ Do not create the run folder immediately.
 5. Replace the scaffolded `00-requirements.md` with the approved requirements content.
 
 This keeps the run artifact grounded in user-approved requirements instead of half-formed notes.
+
+## Routing Awareness
+
+If spec authoring uses delegated critique, delegated review, or any other external model help to shape the draft, re-read:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+immediately before choosing that CLI/model, and route through `recursive-router` instead of inventing an ad hoc model choice.
 
 ## Boundaries
 

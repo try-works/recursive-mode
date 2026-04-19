@@ -290,6 +290,15 @@ Trace backward:
 - Document the fix approach
 - Reference evidence from Phase 1.5
 
+## Routing Awareness
+
+If debugging uses delegated review, external log inspection, or any other routed model help, re-read:
+
+- `/.recursive/config/recursive-router.json`
+- `/.recursive/config/recursive-router-discovered.json`
+
+immediately before choosing the delegated CLI/model, and follow the current routed policy instead of a hardcoded model assumption.
+
 **Record in Phase 1.5 artifact:**
 ```markdown
 ## Root Cause Summary
@@ -318,7 +327,7 @@ If you catch yourself thinking:
 - Proposing solutions before tracing data flow
 - **"One more fix attempt" (when already tried 2+)**
 
-**ALL of these mean: STOP. Return to Phase 2.**
+**ALL of these mean: STOP. Return to Phase 1.5.**
 
 ## Common Process Shortcuts (STOP)
 
@@ -369,6 +378,17 @@ Outputs:
 - `/.recursive/run/<run-id>/01.5-root-cause.md`
 Scope note: This document records systematic debugging process and identified root cause.
 
+## TODO
+
+- [ ] Replace every placeholder section with the concrete root-cause evidence for this run.
+
+## Audit Context
+
+Audit Execution Mode: self-audit / subagent
+Subagent Availability: available / unavailable
+Subagent Capability Probe: [what proved availability or unavailability]
+Delegation Decision Basis: [why self-audit or delegation was chosen]
+
 ## Error Analysis
 
 [Section 2.1 - verbatim errors, stack traces]
@@ -404,6 +424,10 @@ Scope note: This document records systematic debugging process and identified ro
 **Detailed Explanation:** [paragraph]
 **Fix Strategy:** [approach for Phase 2]
 **Test Plan:** [how to verify]
+
+## Requirement Completion Status
+
+- `R1` | `investigated` | Root cause identified at [location] | Evidence: [section]
 
 ## Traceability
 

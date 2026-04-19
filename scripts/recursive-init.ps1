@@ -156,10 +156,6 @@ Acceptance criteria:
 
 - ...
 
-## Assumptions
-
-- ...
-
 ## Coverage Gate
 ...
 Coverage: FAIL

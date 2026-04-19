@@ -362,7 +362,7 @@ def main() -> int:
     parser.add_argument("--repo-root", default=".", help="Repository root path.")
     parser.add_argument("--run-id", required=True, help="Run ID under .recursive/run/.")
     parser.add_argument("--phase", required=True, help="Phase name for the bundle, e.g. '03.5 Code Review'.")
-    parser.add_argument("--role", required=True, help="Delegated role, e.g. code-reviewer, phase-auditor, test-reviewer.")
+    parser.add_argument("--role", required=True, help="Delegated role, e.g. analyst, code-reviewer, tester.")
     parser.add_argument("--artifact-path", required=True, help="Repo-relative artifact path the review is for.")
     parser.add_argument("--upstream-artifact", action="append", default=[], help="Repo-relative upstream artifact path. Repeat as needed.")
     parser.add_argument("--addendum", action="append", default=[], help="Repo-relative addendum path. Repeat as needed.")
@@ -372,6 +372,10 @@ def main() -> int:
     parser.add_argument("--evidence-ref", action="append", default=[], help="Repo-relative evidence artifact path. Repeat as needed.")
     parser.add_argument("--audit-question", action="append", default=[], help="Audit or review question. Repeat as needed.")
     parser.add_argument("--required-output", action="append", default=[], help="Required output bullet. Repeat as needed.")
+    parser.add_argument("--routing-config-path", default="", help="Repo-relative routing policy path for routed delegation.")
+    parser.add_argument("--routing-discovery-path", default="", help="Repo-relative routing discovery path for routed delegation.")
+    parser.add_argument("--routed-cli", default="", help="Resolved routed CLI id if applicable.")
+    parser.add_argument("--routed-model", default="", help="Resolved routed model id if applicable.")
     parser.add_argument("--output-name", default="", help="Optional bundle filename under evidence/review-bundles/.")
     parser.add_argument("--no-auto-addenda", action="store_true", help="Disable automatic addenda discovery for upstream artifacts and the current phase.")
     args = parser.parse_args()
@@ -409,6 +413,8 @@ def main() -> int:
     control_docs = [normalize_repo_path(item) for item in args.control_doc]
     code_refs = [normalize_repo_path(item) for item in args.code_ref]
     evidence_refs = [normalize_repo_path(item) for item in args.evidence_ref]
+    routing_config_path = normalize_repo_path(args.routing_config_path) if args.routing_config_path.strip() else ""
+    routing_discovery_path = normalize_repo_path(args.routing_discovery_path) if args.routing_discovery_path.strip() else ""
     audit_questions = [item.strip() for item in args.audit_question if item.strip()]
     required_output = [item.strip() for item in args.required_output if item.strip()]
 
@@ -445,6 +451,12 @@ def main() -> int:
         "## Bundle Scope",
         "- Canonical delegated review bundle for recursive-mode audit/review work.",
         "- Regenerate this bundle if the draft, changed files, or required evidence changes materially before review.",
+        "",
+        "## Routing",
+        f"- Routed CLI: `{args.routed_cli.strip() or 'none'}`",
+        f"- Routed Model: `{args.routed_model.strip() or 'none'}`",
+        f"- Routing Config Path: `{('/' + routing_config_path) if routing_config_path else 'none'}`",
+        f"- Routing Discovery Path: `{('/' + routing_discovery_path) if routing_discovery_path else 'none'}`",
         "",
         "## Diff Basis",
         f"- Baseline type: `{normalized_diff_basis['baseline_type']}`",
