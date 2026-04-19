@@ -355,11 +355,14 @@ class InstallRecursiveModeTests(unittest.TestCase):
     def test_repo_root_router_policy_is_not_personalized(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         policy_path = repo_root / ".recursive" / "config" / "recursive-router.json"
-        if not policy_path.exists():
-            return
-
+        self.assertTrue(policy_path.exists())
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
         self.assertEqual(router_lib.default_router_policy(), policy)
+
+    def test_repo_root_router_discovery_inventory_is_not_bootstrapped(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        discovery_path = repo_root / ".recursive" / "config" / "recursive-router-discovered.json"
+        self.assertFalse(discovery_path.exists())
 
     def test_root_lockfile_requires_root_package_manifest(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent

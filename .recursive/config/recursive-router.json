@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "defaults": {
+    "when_role_unconfigured": "ask",
+    "when_cli_unavailable": "fallback-local",
+    "when_model_unknown": "ask",
+    "allow_auto_assign_if_single_cli": false,
+    "probe_timeout_ms": 50000,
+    "invoke_timeout_ms": 180000
+  },
+  "role_routes": {
+    "orchestrator": {
+      "enabled": true,
+      "mode": "local-only",
+      "cli": null,
+      "model": null,
+      "fallback": "local-controller"
+    },
+    "analyst": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "planner": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "implementer": {
+      "enabled": false,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "local-controller"
+    },
+    "code-reviewer": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "tester": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    },
+    "memory-auditor": {
+      "enabled": true,
+      "mode": "external-cli",
+      "cli": null,
+      "model": null,
+      "fallback": "self-audit"
+    }
+  },
+  "cli_overrides": {},
+  "custom_clis": []
+}
