@@ -2312,8 +2312,9 @@ class BenchmarkHarness:
                     text = text.replace("- `benchmark/recursive-skills/`\n", "- `benchmark/recursive-skills/`\n" + stage_route_read_line, 1)
                 else:
                     text += "\n" + stage_route_read_line
+            run_id_for_prompt = result.run_id or "benchmark-run-id-missing"
             action_record_line = (
-                f"- Use `python scripts/recursive-router-invoke.py` (or the `.ps1` wrapper) for routed calls and immediately write the matching durable action record with `python scripts/recursive-subagent-action.py` (or `.ps1`) under `.recursive/run/{result.run_id or 'benchmark-run-id-missing'}/subagents/`."
+                f"- Use `python scripts/recursive-router-invoke.py` (or the `.ps1` wrapper) for routed calls with initial prompt bundles under `.recursive/run/{run_id_for_prompt}/router-prompts/`; preserve raw routed output and metadata under `.recursive/run/{run_id_for_prompt}/evidence/router/`; then write the matching durable action record with `python scripts/recursive-subagent-action.py` (or `.ps1`) under `.recursive/run/{run_id_for_prompt}/subagents/`."
             )
             if stage_route_prompt_block:
                 if action_record_line in text:
@@ -3485,7 +3486,7 @@ class BenchmarkHarness:
                 "- Do not postpone routed delegation to Phase 8 if an earlier configured routed stage is still missing evidence. Planner routing belongs in Phase 2, code-reviewer/tester routing belongs in verification or repair before locking the relevant audited stage, and memory-auditor routing belongs in Phase 8.",
                 "- Timeout or latency alone is not an acceptable override reason when a configured routed role is available. Only override after confirming the route is disabled, unavailable in `.recursive/config/recursive-router-discovered.json`, or a routed call actually fails, and record that concrete reason in the repaired artifact and benchmark log.",
                 "- Do not lock or advance past a routed stage that timed out or failed. Repair that same stage until it passes: reroute to another configured model/CLI for the stage when possible, or complete the stage locally with full audit rigor only after recording why routed execution was not viable.",
-                "- Use `python scripts/recursive-router-invoke.py` (or the `.ps1` wrapper) for routed repair calls and write the matching durable action record with `python scripts/recursive-subagent-action.py` (or `.ps1`) under `.recursive/run/<run-id>/subagents/`.",
+                "- Use `python scripts/recursive-router-invoke.py` (or the `.ps1` wrapper) for routed repair calls with initial prompt bundles under `.recursive/run/<run-id>/router-prompts/`; preserve raw routed output and metadata under `.recursive/run/<run-id>/evidence/router/`; then write the matching durable action record with `python scripts/recursive-subagent-action.py` (or `.ps1`) under `.recursive/run/<run-id>/subagents/`.",
                 *([stage_route_prompt_block] if stage_route_prompt_block else []),
                 "- Delegated roles may propose fixes, but the orchestrator stays responsible for the audit-repair loop: re-check their output, correct anything incomplete or inconsistent, and continue until strict recursive lint would pass.",
                 "- Do not hand off final gate ownership. The orchestrator must make sure every required artifact, audit field, lock field, diff citation, and approval gate is satisfied before finishing.",
@@ -4214,10 +4215,12 @@ class BenchmarkHarness:
     def ensure_recursive_evidence_layout(self, run_root: Path) -> None:
         evidence_root = run_root / "evidence"
         for path in (
+            run_root / "router-prompts",
             evidence_root / "logs" / "baseline",
             evidence_root / "logs" / "green",
             evidence_root / "manual",
             evidence_root / "screenshots",
+            evidence_root / "router",
             evidence_root / "perf",
             evidence_root / "traces",
         ):
@@ -6247,10 +6250,12 @@ class BenchmarkHarness:
         if not run_root.exists():
             return
         for path in (
+            run_root / "router-prompts",
             evidence_root / "logs" / "baseline",
             evidence_root / "logs" / "green",
             evidence_root / "manual",
             evidence_root / "screenshots",
+            evidence_root / "router",
         ):
             path.mkdir(parents=True, exist_ok=True)
 

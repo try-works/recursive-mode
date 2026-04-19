@@ -56,11 +56,11 @@ class RecursiveSubagentActionTests(unittest.TestCase):
                 "--cli-probe-summary",
                 "codex available",
                 "--prompt-bundle-path",
-                ".recursive/run/run-123/evidence/review-bundles/prompt.txt",
+                ".recursive/run/run-123/router-prompts/code-reviewer-bundle.md",
                 "--invocation-exit-code",
                 "0",
                 "--output-capture-path",
-                ".recursive/run/run-123/evidence/logs/code-reviewer.txt",
+                ".recursive/run/run-123/evidence/router/code-reviewer-output.md",
             ],
             cwd=str(REPO_ROOT),
             text=True,
@@ -77,9 +77,9 @@ class RecursiveSubagentActionTests(unittest.TestCase):
         self.assertIn("- Routed CLI: `codex`", content)
         self.assertIn("- Routed Model: `gpt-5`", content)
         self.assertIn("- Routing Config Path: `/.recursive/config/recursive-router.json`", content)
-        self.assertIn("- Prompt Bundle Path: `/.recursive/run/run-123/evidence/review-bundles/prompt.txt`", content)
+        self.assertIn("- Prompt Bundle Path: `/.recursive/run/run-123/router-prompts/code-reviewer-bundle.md`", content)
         self.assertIn("- Invocation Exit Code: `0`", content)
-        self.assertIn("- `/.recursive/run/run-123/evidence/logs/code-reviewer.txt`", content)
+        self.assertIn("- `/.recursive/run/run-123/evidence/router/code-reviewer-output.md`", content)
 
 
 if __name__ == "__main__":

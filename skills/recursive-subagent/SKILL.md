@@ -15,9 +15,9 @@ This skill does not relax the canonical workflow. The main agent remains respons
 - rejecting incomplete or context-free subagent output
 - falling back to `self-audit` when subagents are unavailable
 
-If `recursive-router` is installed, only consult it when the user has explicitly asked to use routing or set up provider/model routing for delegated work. Because router discovery may inspect local CLI and provider configuration on the device, ask the user first whether they want to set up model routing between providers before invoking router discovery or configuration.
+If `recursive-router` is installed, consult it when the user has explicitly asked to use routing or when an active configured external route exists for the selected delegated role. Because router discovery and configuration may inspect local CLI and provider configuration on the device, ask the user first before new setup or policy changes. Do not ask again merely to honor an already configured external route for a role that must now be dispatched.
 
-Once the user confirms routed setup or explicitly requests routed delegation, consult:
+Once the user confirms routed setup, explicitly requests routed delegation, or the role has an active configured external route, consult:
 
 - `/.recursive/config/recursive-router.json`
 - `/.recursive/config/recursive-router-discovered.json`
@@ -25,7 +25,7 @@ Once the user confirms routed setup or explicitly requests routed delegation, co
 
 before choosing a routed external CLI/model path for a role.
 
-Re-read those files from disk immediately before every routed dispatch. Do not reuse an earlier in-memory resolution if policy, discovery state, or fallback behavior may have changed during the run.
+Re-read those files from disk immediately before every routed dispatch. Do not reuse an earlier in-memory resolution if policy, discovery state, or fallback behavior may have changed during the run. If `recursive-router-resolve` returns `external-cli`, use `recursive-router-invoke` for that delegated slot. Local/self-audit execution is only the valid path when the route resolves to `fallback-local`, `local-only`, `blocked`, or `ask-user`, and the recorded artifact must say so.
 
 ## Priority Of Use
 
@@ -54,7 +54,7 @@ If subagents are available:
 
 - record `Subagent Availability: available`
 - delegate by default for audit/review work when the context bundle is complete
-- consult router policy before dispatch when the current task explicitly requests routed delegation and external CLI routing is configured for the selected role
+- consult router policy before dispatch when the current task explicitly requests routed delegation or external CLI routing is configured for the selected role
 - if the controller still chooses `self-audit`, record a concrete `Delegation Override Reason`
 - keep the same audit checklist and acceptance standard
 
@@ -102,11 +102,13 @@ Before dispatch:
 - [ ] Confirm the handoff bundle is complete
 - [ ] Confirm the canonical review bundle path exists when delegation is being recorded in a phase artifact
 - [ ] Confirm a durable subagent action record will be written under `/.recursive/run/<run-id>/subagents/`
+- [ ] Confirm initial prompt bundles are cited from a prompt-bundle path, and routed assistant output, stdout/stderr transcripts, and invoke metadata will be captured under `/.recursive/run/<run-id>/evidence/router/`, not directly under `subagents/`
 - [ ] Confirm the target subagent role matches the task
 - [ ] Confirm write scopes are disjoint before any write-capable delegation
 
 Before accepting a result:
 
+- [ ] Verify the routed invocation has `success: true` and exit code `0` when external CLI routing was used
 - [ ] Verify the subagent read the named upstream artifacts
 - [ ] Verify the subagent read the review bundle or its full equivalent
 - [ ] Verify the subagent returned enough detail to populate the action record fields
@@ -120,6 +122,8 @@ Before accepting a result:
 - [ ] Verify the phase artifact records `Reviewed Action Records`, `Main-Agent Verification Performed`, `Acceptance Decision`, `Refresh Handling`, and `Repair Performed After Verification`
 - [ ] Reject action records that leave claimed file impact or claimed artifact impact as `none` for materially contributing work
 - [ ] Reject the output if it is context-free, hand-wavy, or missing required checks
+
+If a routed subagent reports failures, findings, incomplete work, `success: false`, or a nonzero external CLI exit code, do not accept the result. The controller must run an audit-repair-retry loop: record the failed attempt and diagnostic evidence, tell the same bounded role exactly what to fix when it has ownership to fix it, rerun the route, and then repeat controller verification against the actual diff and artifacts. If the routed role cannot fix the issue or the route remains unavailable, record an explicit fallback before using local repair or self-audit evidence.
 
 ## Recommended Roles
 

@@ -14,6 +14,15 @@ def _normalize_prompt_path(repo_root: Path, prompt_path: Path) -> str:
         return str(prompt_path)
 
 
+def _is_run_subagents_path(repo_root: Path, path: Path) -> bool:
+    try:
+        relative = path.resolve().relative_to(repo_root)
+    except ValueError:
+        return False
+    parts = relative.parts
+    return len(parts) >= 4 and parts[0] == ".recursive" and parts[1] == "run" and parts[3] == "subagents"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Invoke a recursive-router role with a real prompt bundle or inline prompt.")
     parser.add_argument("--repo-root", default=".", help="Repository root path.")
@@ -30,6 +39,16 @@ def main() -> int:
 
     repo_root = Path(args.repo_root).resolve()
     try:
+        if args.output_file and _is_run_subagents_path(repo_root, Path(args.output_file)):
+            raise RouterConfigError(
+                "Raw routed output must be stored under the run evidence tree, "
+                "for example /.recursive/run/<run-id>/evidence/router/, not under subagents/."
+            )
+        if args.metadata_file and _is_run_subagents_path(repo_root, Path(args.metadata_file)):
+            raise RouterConfigError(
+                "Router invocation metadata must be stored under the run evidence tree, "
+                "for example /.recursive/run/<run-id>/evidence/router/, not under subagents/."
+            )
         prompt_bundle_path = ""
         if args.prompt_file:
             prompt_path = Path(args.prompt_file).resolve()

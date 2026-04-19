@@ -28,9 +28,9 @@ The current controller remains responsible for:
 
 ## Invocation Boundary
 
-`recursive-router` is **opt-in**. Do **not** activate it just because delegated work is possible or because router config files already exist in the repo.
+Router setup, local CLI discovery, and route reconfiguration are opt-in because those operations may inspect local CLI installs plus provider/model configuration on the user's device. Only run `init`, `probe`, `configure`, or other discovery/configuration steps when routing has been explicitly requested or an already active routed policy needs a refreshed inventory to execute.
 
-Because router setup and probing may inspect local CLI installs plus provider/model configuration on the user's device, only treat explicit routing language as an invocation signal. Valid examples include phrases containing:
+Valid explicit routing examples include phrases containing:
 
 - `route`
 - `routing`
@@ -41,9 +41,15 @@ Because router setup and probing may inspect local CLI installs plus provider/mo
 - `configure model routing`
 - `use <provider/model> for <role>`
 
-When that kind of language appears, ask the user **first** whether they want to set up model routing between the different providers for this repo. Do not run `init`, `probe`, `configure`, or any other local-environment discovery step until the user confirms.
+When that kind of language appears for new setup, ask the user first whether they want to set up model routing between providers for this repo. Do not inspect local device state or modify routing policy for a new setup until the user confirms.
 
 If the user declines or only wants an explanation of router behavior, do not inspect the local device and do not modify routing policy.
+
+Once the user has explicitly requested routed delegation, or the selected canonical role already has an active configured external route, the router is in scope and the controller should not ask again whether to use it for that delegated slot. An active configured external route means the role has `enabled: true`, `mode: "external-cli"`, a non-null `cli`, and a non-null `model` in `/.recursive/config/recursive-router.json`, or the user supplied an explicit route binding for that role.
+
+If `recursive-router-resolve` returns `external-cli`, dispatch through `recursive-router-invoke`. Local/self-audit execution is only an acceptable substitute when the effective route resolves to `fallback-local`, `local-only`, `blocked`, or `ask-user`, and that route outcome must be recorded in the phase artifact or subagent action record. The controller may reject routed output after verification and repair locally, but it must record that rejection/repair instead of treating the local repair as proof that the routed role performed the assignment.
+
+If `recursive-router-invoke` returns `success: false` or a nonzero `exit_code`, treat that routed attempt as failed even when `output_text` contains useful assistant text. Preserve the output as diagnostic evidence, record the failed attempt, then repair the prompt/context or ask the same routed role to fix the reported issue and retry. Do not accept the routed role, mark a phase gate PASS, or claim tester/implementer/reviewer completion from a nonzero-exit attempt.
 
 ## Purpose
 
@@ -125,12 +131,12 @@ Use the router scripts to initialize, probe, validate, and resolve routing:
 python ./scripts/recursive-router-init.py --repo-root .
 python ./scripts/recursive-router-probe.py --repo-root . --json
 python ./scripts/recursive-router-configure.py --repo-root . --set code-reviewer=codex:gpt-5.4-mini --json
-python ./scripts/recursive-router-invoke.py --repo-root . --role code-reviewer --prompt-file "./.recursive/router-prompts/code-reviewer-bundle.md" --json
+python ./scripts/recursive-router-invoke.py --repo-root . --role code-reviewer --prompt-file "./.recursive/run/<run-id>/router-prompts/code-reviewer-bundle.md" --json
 python ./scripts/recursive-router-validate.py --repo-root .
 python ./scripts/recursive-router-resolve.py --repo-root . --role code-reviewer --json
 pwsh -NoProfile -File ./scripts/recursive-router-probe.ps1 -RepoRoot . -Json
 pwsh -NoProfile -File ./scripts/recursive-router-configure.ps1 -RepoRoot . -Set code-reviewer=codex:gpt-5.4-mini -Json
-pwsh -NoProfile -File ./scripts/recursive-router-invoke.ps1 -RepoRoot . -Role code-reviewer -PromptFile "./.recursive/router-prompts/code-reviewer-bundle.md" -Json
+pwsh -NoProfile -File ./scripts/recursive-router-invoke.ps1 -RepoRoot . -Role code-reviewer -PromptFile "./.recursive/run/<run-id>/router-prompts/code-reviewer-bundle.md" -Json
 ```
 
 Built-in discovery targets are:
@@ -171,7 +177,7 @@ Policy timeout behavior:
 - For `codex`, point the override at a real `codex.exe` that supports `app-server`; keep the routed transport on the native app-server path.
 - For `opencode`, use the dedicated CLI binary such as `opencode-cli.exe`, not the desktop app wrapper such as `OpenCode.exe`.
 - For simple one-shot `kimi` shell calls, `kimi --quiet --prompt "..."` works, but the CLI may still append session metadata like `<choice>STOP</choice>` and resume instructions.
-- When another agent needs machine-readable `kimi` output, prefer `kimi --print --output-format stream-json --work-dir "<repo>" --prompt "..."` and parse the assistant text from the structured stream.
+- When another agent needs machine-readable `kimi` output, prefer `kimi --work-dir "<repo>" --print --output-format stream-json --max-ralph-iterations 0 --prompt "..."` and parse only assistant text from the structured stream. Setting max Ralph iterations to `0` keeps one-shot routed tasks from inheriting local loop-control choices such as `<choice>STOP</choice>`.
 - If the caller speaks ACP and wants a persistent server instead of one-shot shell delegation, `kimi acp` is the supported Kimi ACP entrypoint.
 - For simple one-shot `opencode` shell calls, `opencode-cli.exe run "..."` works; for machine-readable orchestration, prefer `opencode-cli.exe run --format json --dir "<repo>" "..."`.
 - If the caller speaks ACP and wants a persistent server instead of one-shot shell delegation, use `opencode-cli.exe acp --cwd "<repo>"` rather than the desktop wrapper.
@@ -186,8 +192,10 @@ Policy timeout behavior:
 3. Ask the user for any unresolved role bindings in compact `role=cli:model` form.
 4. Apply the requested bindings with `recursive-router-configure.py` or `.ps1` so each route is verified before save.
 5. Build or refresh the canonical review bundle or routed prompt bundle for the exact delegated assignment using the contract from `recursive-subagent`.
-6. Run `resolve` for the specific role immediately before delegated execution so fallback behavior stays current with the live environment.
-7. Dispatch the bounded assignment with `recursive-router-invoke.py` or `.ps1`, then verify the result against the real repo state before any acceptance.
+6. From the same repo/worktree that will dispatch the role, ensure `/.recursive/config/recursive-router.json` and `/.recursive/config/recursive-router-discovered.json` are present and current. Discovery inventory is local and may be untracked, so refresh or copy it before resolving a route in a new worktree.
+7. Run `resolve` for the specific role immediately before delegated execution so fallback behavior stays current with the live environment.
+8. If the decision is `external-cli`, dispatch the bounded assignment with `recursive-router-invoke.py` or `.ps1`, capture metadata/output paths, then verify the result against the real repo state before any acceptance.
+9. If the invocation failed, repair the context or dispatch prompt and rerun the same routed role. When the subagent output identifies issues it can fix, the controller should explicitly instruct that routed role to fix them within its bounded ownership, then rerun controller verification and the routed check.
 
 Prefer the configure script over hand-editing policy whenever the controller is making the change, because configure-and-verify prevents bad or stale bindings from being saved silently.
 
@@ -282,6 +290,8 @@ Use `scripts/recursive-subagent-action.py` or `.ps1` to capture routed action-re
 - `Invocation Exit Code`
 - `Output Capture Paths`
 
+Store routed assistant output, raw stdout/stderr transcripts, and invoke metadata under the run evidence tree, for example `/.recursive/run/<run-id>/evidence/router/`. Keep initial prompt bundles under a run-scoped prompt-bundle location such as `/.recursive/run/<run-id>/router-prompts/` and cite them as `Prompt Bundle Path`. Do not bootstrap top-level `/.recursive/router-prompts/` in reusable repos. Do not store raw transcripts directly under `/.recursive/run/<run-id>/subagents/`; every Markdown file in `subagents/` is a canonical subagent action record and must satisfy the action-record schema. The action record may cite transcript and metadata files from `evidence/router/`.
+
 When routed prompts are sensitive to exact sectioning or citations, prefer a durable prompt bundle that includes:
 
 - the role and bounded assignment
@@ -300,4 +310,6 @@ When routed prompts are sensitive to exact sectioning or citations, prefer a dur
 - Do **not** configure Kimi with the raw `model = "..."` value from `~/.kimi/config.toml`; use the alias key that `kimi --model ...` accepts.
 - Do **not** assume Codex will reject every invalid model early enough to serve as discovery. Prefer app-server `model/list` and the discovery inventory as the authority.
 - Do **not** accept routed external output without controller verification against actual files, actual diffs, and actual recursive artifacts.
+- Do **not** accept any routed attempt with `success: false` or a nonzero `exit_code`; repair and retry or record an explicit fallback.
+- Do **not** store raw routed transcripts as Markdown files under `subagents/`; put raw router evidence under `evidence/router/` and generate proper action records under `subagents/`.
 - Do **not** delegate with only bare file-path references when the routed role needs bundled context or exact output-shape instructions to succeed.

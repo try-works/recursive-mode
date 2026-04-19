@@ -179,7 +179,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
             Path("skills/recursive-router/SKILL.md"): (
                 "./scripts/recursive-router-init.py",
                 "./scripts/recursive-router-invoke.py",
-                "./.recursive/router-prompts/code-reviewer-bundle.md",
+                "./.recursive/run/<run-id>/router-prompts/code-reviewer-bundle.md",
             ),
             Path("skills/recursive-review-bundle/SKILL.md"): (
                 "./scripts/recursive-review-bundle.py",

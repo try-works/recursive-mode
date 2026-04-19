@@ -134,6 +134,12 @@ Do not hardcode provider or model strings for routed delegation when repo policy
 
 If routed delegation is in scope, prefer `skills/recursive-router/SKILL.md` plus the canonical `recursive-router-resolve` and `recursive-router-invoke` scripts over bespoke model selection logic.
 
+If routed delegation has been explicitly requested, or if `recursive-router-resolve` for the selected role returns `external-cli`, do not satisfy that delegated slot with local/self-audit work unless the effective route is `fallback-local`, `local-only`, `blocked`, or `ask-user` and that outcome is recorded. The controller may reject routed output after checking it against the actual files, diffs, and recursive artifacts, but unverified local work is not a substitute for a configured routed implementer, tester, reviewer, auditor, or planner role.
+
+If a routed invocation returns `success: false`, exits nonzero, or reports issues that the bounded role is responsible for fixing, run an audit-repair-retry loop: preserve the failed attempt as evidence, tell the routed subagent exactly what to fix, rerun the same route after repair, then verify the new output locally before acceptance. Do not mark the delegated role or phase gate complete from a nonzero-exit routed attempt.
+
+Before dispatching from an isolated worktree, make sure the routing policy and discovery inventory are present and current in that same worktree. Discovery inventory is often untracked, so a newly created worktree can have `/.recursive/config/recursive-router.json` without `/.recursive/config/recursive-router-discovered.json`; refresh discovery from the worktree or copy the current inventory from the controller/source repo before resolving or invoking a route, then record the paths and outcome in the phase artifact or action record.
+
 ## Optional add-on
 
 - `recursive-benchmark` is intentionally excluded from the default exported recursive-mode package because it carries large packaged benchmark fixtures.

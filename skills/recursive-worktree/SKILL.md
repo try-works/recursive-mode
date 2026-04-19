@@ -92,6 +92,26 @@ Run the setup command that matches the repo:
 
 Then run the baseline test command appropriate to the project and record the result in `00-worktree.md`.
 
+## Router State In Worktrees
+
+Before delegated or routed work runs from an isolated worktree, verify the router files inside that same worktree:
+
+```bash
+test -f .recursive/config/recursive-router.json
+test -f .recursive/config/recursive-router-discovered.json
+```
+
+```powershell
+Test-Path .recursive/config/recursive-router.json
+Test-Path .recursive/config/recursive-router-discovered.json
+```
+
+If the controller/source repo has a configured router policy or discovery inventory and the worktree lacks it, sync both files into the worktree before resolving or invoking routed roles. Preserve user edits to the worktree policy; when changing bindings, prefer `recursive-router-configure` over hand edits.
+
+`recursive-router-discovered.json` is local discovery state and may be untracked. Its absence in a fresh worktree is expected, but it is still not safe to resolve an external role from stale assumptions. Refresh it with `python ./scripts/recursive-router-probe.py --repo-root . --json` from the worktree, or copy the current inventory from the controller/source repo when that is the intended policy basis.
+
+Record the router policy path, discovery path, validation/probe command, and resulting route decision in `00-worktree.md` or in the delegated action record before accepting routed work.
+
 ## Output Contract
 
 Write the artifact to:

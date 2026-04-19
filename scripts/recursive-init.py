@@ -266,10 +266,11 @@ def main() -> None:
     ensure_directory(run_dir)
     ensure_directory(run_dir / "addenda")
     ensure_directory(run_dir / "subagents")
+    ensure_directory(run_dir / "router-prompts")
 
     evidence_dir = run_dir / "evidence"
     ensure_directory(evidence_dir)
-    for sub in ("screenshots", "logs", "perf", "traces", "review-bundles", "other"):
+    for sub in ("screenshots", "logs", "perf", "traces", "review-bundles", "router", "other"):
         ensure_directory(evidence_dir / sub)
 
     requirements_path = run_dir / "00-requirements.md"

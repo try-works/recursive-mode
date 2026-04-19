@@ -141,7 +141,19 @@ BUILTIN_ADAPTERS: tuple[CLIAdapter, ...] = (
     CLIAdapter(
         id="kimi",
         command="kimi",
-        invoke_template=("--model", "{model}", "--print", "--final-message-only", "--prompt", "{prompt}"),
+        invoke_template=(
+            "--model",
+            "{model}",
+            "--work-dir",
+            "{repo_root}",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--max-ralph-iterations",
+            "0",
+            "--prompt",
+            "{prompt}",
+        ),
     ),
     CLIAdapter(
         id="opencode",
@@ -543,14 +555,28 @@ def _run_command(command: list[str], *, timeout_ms: int, cwd: Path | None = None
         shell_path = resolve_command_path("pwsh") or resolve_command_path("powershell")
         if shell_path is not None:
             command = [shell_path, "-NoProfile", "-File", command[0], *command[1:]]
-    return subprocess.run(
-        command,
-        cwd=str(cwd) if cwd else None,
-        text=True,
-        capture_output=True,
-        timeout=max(0.5, timeout_ms / 1000.0),
-        check=False,
-    )
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            env=env,
+            timeout=max(0.5, timeout_ms / 1000.0),
+            check=False,
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=127,
+            stdout="",
+            stderr=f"Failed to start command: {exc}",
+        )
 
 
 def _normalize_version(stdout: str, stderr: str) -> str | None:
@@ -962,17 +988,85 @@ def _run_template_invocation(
                     prompt_path=prompt_path,
                     timeout_ms=timeout_ms,
                 )
-        args = [piece.format(model=model, prompt_file=str(prompt_path), prompt=prompt) for piece in adapter.invoke_template]
+        args = [
+            piece.format(model=model, prompt_file=str(prompt_path), prompt=prompt, repo_root=str(repo_root))
+            for piece in adapter.invoke_template
+        ]
         return _run_command([*command_argv, *args], timeout_ms=timeout_ms, cwd=repo_root)
 
 
-def _strip_ansi(text: str) -> str:
+def _strip_ansi(text: str | None) -> str:
+    if text is None:
+        return ""
     return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
 
 
+def _collect_text_content(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        fragments: list[str] = []
+        for item in value:
+            fragments.extend(_collect_text_content(item))
+        return fragments
+    if isinstance(value, dict):
+        fragments = []
+        for key in ("text", "content"):
+            if key in value:
+                fragments.extend(_collect_text_content(value[key]))
+        return fragments
+    return []
+
+
+def _assistant_text_from_payload(value: object) -> list[str]:
+    if isinstance(value, list):
+        fragments: list[str] = []
+        for item in value:
+            fragments.extend(_assistant_text_from_payload(item))
+        return fragments
+    if not isinstance(value, dict):
+        return []
+
+    role = str(value.get("role", "")).lower()
+    payload_type = str(value.get("type", "")).lower()
+    assistant_like = role == "assistant" or payload_type in {
+        "assistant",
+        "assistant_message",
+        "agentmessage",
+        "agent_message",
+    }
+    if assistant_like:
+        fragments = _collect_text_content(value)
+        if fragments:
+            return fragments
+
+    fragments: list[str] = []
+    for key in ("message", "delta", "part", "content", "data"):
+        child = value.get(key)
+        if isinstance(child, (dict, list)):
+            fragments.extend(_assistant_text_from_payload(child))
+    return fragments
+
+
 def _normalize_kimi_output(text: str) -> str:
-    lines = [line for line in text.splitlines() if line.strip() and line.strip() != "<choice>STOP</choice>"]
-    return "\n".join(lines).strip()
+    fragments: list[str] = []
+    plain_lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line == "<choice>STOP</choice>":
+            continue
+        if line.startswith("{"):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                plain_lines.append(raw_line)
+                continue
+            fragments.extend(_assistant_text_from_payload(payload))
+        else:
+            plain_lines.append(raw_line)
+    if fragments:
+        return "\n".join(fragment.strip() for fragment in fragments if fragment.strip()).strip()
+    return "\n".join(line for line in plain_lines if line.strip()).strip()
 
 
 def _normalize_opencode_output(text: str) -> str:
@@ -1024,18 +1118,18 @@ def _run_template_invocation_via_powershell(
             before, after = piece.split("{prompt}", 1)
             expression_parts: list[str] = []
             if before:
-                formatted_before = before.format(model=model, prompt_file=str(prompt_path), prompt="")
+                formatted_before = before.format(model=model, prompt_file=str(prompt_path), prompt="", repo_root=str(repo_root))
                 expression_parts.append(f"'{_single_quote_for_powershell(formatted_before)}'")
             expression_parts.append(prompt_expression)
             if after:
-                formatted_after = after.format(model=model, prompt_file=str(prompt_path), prompt="")
+                formatted_after = after.format(model=model, prompt_file=str(prompt_path), prompt="", repo_root=str(repo_root))
                 expression_parts.append(f"'{_single_quote_for_powershell(formatted_after)}'")
             if len(expression_parts) == 1:
                 args_lines.append(f"    {expression_parts[0]}")
             else:
                 args_lines.append(f"    ({' + '.join(expression_parts)})")
             continue
-        formatted = piece.format(model=model, prompt_file=str(prompt_path), prompt="")
+        formatted = piece.format(model=model, prompt_file=str(prompt_path), prompt="", repo_root=str(repo_root))
         args_lines.append(f"    '{_single_quote_for_powershell(formatted)}'")
     script = "\n".join(
         [
@@ -1550,8 +1644,13 @@ def verify_route_binding(
                 *command_argv,
                 "--model",
                 model,
+                "--work-dir",
+                str(repo_root),
                 "--print",
-                "--final-message-only",
+                "--output-format",
+                "stream-json",
+                "--max-ralph-iterations",
+                "0",
                 "--prompt",
                 prompt,
             ],
@@ -1709,8 +1808,13 @@ def invoke_route_binding(
                 *command_argv,
                 "--model",
                 model,
+                "--work-dir",
+                str(repo_root),
                 "--print",
-                "--final-message-only",
+                "--output-format",
+                "stream-json",
+                "--max-ralph-iterations",
+                "0",
                 "--prompt",
                 prompt,
             ],
@@ -1724,7 +1828,7 @@ def invoke_route_binding(
                 "raw_stdout": completed.stdout,
                 "raw_stderr": _strip_ansi(completed.stderr),
                 "exit_code": completed.returncode,
-                "success": bool(output_text),
+                "success": bool(output_text) and completed.returncode == 0,
                 "reason": (
                     "Prompt completed through Kimi."
                     if output_text and completed.returncode == 0

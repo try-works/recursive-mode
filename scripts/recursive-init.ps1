@@ -400,6 +400,7 @@ Ensure-Directory -Path $runRoot
 Ensure-Directory -Path $runDir
 Ensure-Directory -Path (Join-Path $runDir "addenda")
 Ensure-Directory -Path (Join-Path $runDir "subagents")
+Ensure-Directory -Path (Join-Path $runDir "router-prompts")
 
 $evidenceDir = Join-Path $runDir "evidence"
 Ensure-Directory -Path $evidenceDir
@@ -408,6 +409,7 @@ Ensure-Directory -Path (Join-Path $evidenceDir "logs")
 Ensure-Directory -Path (Join-Path $evidenceDir "perf")
 Ensure-Directory -Path (Join-Path $evidenceDir "traces")
 Ensure-Directory -Path (Join-Path $evidenceDir "review-bundles")
+Ensure-Directory -Path (Join-Path $evidenceDir "router")
 Ensure-Directory -Path (Join-Path $evidenceDir "other")
 
 $requirementsPath = Join-Path $runDir "00-requirements.md"

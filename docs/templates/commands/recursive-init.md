@@ -25,8 +25,8 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-init.ps1" -RepoRoot . -RunI
 2. Generates `00-requirements.md`
 3. Generates a prefilled `00-worktree.md` scaffold with executable Phase 0 diff-basis fields when git state can be resolved
 4. Validates that the recorded Phase 0 diff basis is executable against live git state before returning success
-5. Creates `addenda/`, `subagents/`, and `evidence/` subfolders
-6. Creates canonical evidence subfolders including `review-bundles/`
+5. Creates `addenda/`, `subagents/`, `router-prompts/`, and `evidence/` subfolders
+6. Creates canonical evidence subfolders including `review-bundles/` and `router/`
 7. Marks the run as `recursive-mode-audit-v2`
 
 ## Output
@@ -35,7 +35,8 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-init.ps1" -RepoRoot . -RunI
 - `/.recursive/run/<run-id>/00-worktree.md`
 - `/.recursive/run/<run-id>/addenda/`
 - `/.recursive/run/<run-id>/subagents/`
-- `/.recursive/run/<run-id>/evidence/{screenshots,logs,perf,traces,review-bundles,other}/`
+- `/.recursive/run/<run-id>/router-prompts/`
+- `/.recursive/run/<run-id>/evidence/{screenshots,logs,perf,traces,review-bundles,router,other}/`
 
 ## Diff Basis Notes
 

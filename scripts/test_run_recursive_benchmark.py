@@ -246,6 +246,8 @@ class RecursiveBenchmarkIntegrityTests(unittest.TestCase):
         self.assertTrue((evidence_root / "logs" / "green").is_dir())
         self.assertTrue((evidence_root / "manual").is_dir())
         self.assertTrue((evidence_root / "screenshots").is_dir())
+        self.assertTrue((evidence_root / "router").is_dir())
+        self.assertTrue((self.repo_root / ".recursive" / "run" / self.run_id / "router-prompts").is_dir())
 
     def test_sync_recursive_run_evidence_copies_green_logs_and_screenshots(self) -> None:
         run_root = self.repo_root / ".recursive" / "run" / self.run_id

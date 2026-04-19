@@ -122,6 +122,7 @@ class RecursiveRouterTests(unittest.TestCase):
         probe_sleep_seconds: float = 0.0,
         require_structured_run: bool = False,
         record_invocations_path: Path | None = None,
+        emit_output_before_failure: bool = False,
     ) -> Path:
         runner_path = self.bin_dir / f"{name}-runner.py"
         model_lines = "\\n".join(models or [])
@@ -135,6 +136,7 @@ class RecursiveRouterTests(unittest.TestCase):
 
             invoke_echo = {invoke_echo!r}
             invoke_exit = {invoke_exit!r}
+            emit_output_before_failure = {emit_output_before_failure!r}
             record_invocations_path = {str(record_invocations_path) if record_invocations_path else None!r}
             args = sys.argv[1:]
 
@@ -149,6 +151,20 @@ class RecursiveRouterTests(unittest.TestCase):
                     print(prompt)
                 else:
                     print("verification failed")
+                raise SystemExit(0)
+
+            def emit_stream_json(prompt: str) -> None:
+                if record_invocations_path:
+                    with pathlib.Path(record_invocations_path).open("a", encoding="utf-8") as handle:
+                        handle.write(json.dumps(args) + "\\n")
+                message = prompt if invoke_echo else "verification failed"
+                if emit_output_before_failure:
+                    print(json.dumps({{"role": "assistant", "content": message}}))
+                if invoke_exit != 0:
+                    print("invocation failed", file=sys.stderr)
+                    raise SystemExit(invoke_exit)
+                print(json.dumps({{"role": "assistant", "content": message}}))
+                print("<choice>STOP</choice>")
                 raise SystemExit(0)
 
             if args == ["--version"]:
@@ -190,6 +206,8 @@ class RecursiveRouterTests(unittest.TestCase):
                 ]
             ):
                 emit_prompt(args[10])
+            if args[:2] == ["--model", args[1]] and "--output-format" in args and args[args.index("--output-format") + 1] == "stream-json" and "--work-dir" in args and "--prompt" in args:
+                emit_stream_json(args[args.index("--prompt") + 1])
             if args[:2] == ["--model", args[1]] and "--prompt" in args:
                 emit_prompt(args[args.index("--prompt") + 1])
             if args == ["app-server", "--listen", "stdio://"]:
@@ -615,6 +633,36 @@ model = "kimi-k2.6-code-previews"
         self.assertTrue(any("probe failed" in note.lower() for note in broken_cli["notes"]))
         self.assertFalse(slow_cli["available"])
         self.assertTrue(any("timed out" in note.lower() for note in slow_cli["notes"]))
+
+    def test_probe_records_launcher_start_failure_without_aborting_inventory(self) -> None:
+        self.install_bootstrap()
+        blocked_command = self.temp_dir / "not-an-executable"
+        blocked_command.mkdir()
+        self.make_fake_cli("kimi", version="1.32.0")
+        policy = self.load_json(self.policy_path())
+        policy["custom_clis"] = [
+            {
+                "id": "blocked-cli",
+                "command": str(blocked_command),
+                "probe_args": ["--version"],
+                "invoke_template": ["run", "--model", "{model}", "--prompt", "{prompt}"],
+            }
+        ]
+        self.write_policy(policy)
+
+        completed = self.run_repo_script(
+            "recursive-router-probe.py",
+            "--repo-root",
+            str(self.repo_root),
+            "--json",
+        )
+        payload = json.loads(completed.stdout)
+        blocked = next(entry for entry in payload["clis"] if entry["id"] == "blocked-cli")
+        kimi = next(entry for entry in payload["clis"] if entry["id"] == "kimi")
+
+        self.assertFalse(blocked["available"])
+        self.assertIn("Failed to start command", blocked["notes"][0])
+        self.assertTrue(kimi["available"])
 
     def test_probe_discovers_custom_cli_with_model_listing(self) -> None:
         self.install_bootstrap()
@@ -1049,6 +1097,99 @@ model = "kimi-for-coding"
         self.assertTrue(payload["verification_results"]["code-reviewer"]["verified"])
         self.assertEqual(policy["role_routes"]["code-reviewer"]["model"], "kimi-code/kimi-for-coding")
 
+    def test_invoke_dispatches_prompt_bundle_through_kimi_stream_json(self) -> None:
+        self.install_bootstrap()
+        invocation_log = self.temp_dir / "kimi-invocations.jsonl"
+        self.make_fake_cli("kimi", version="1.32.0", record_invocations_path=invocation_log)
+        self.write_home_file(
+            ".kimi/config.toml",
+            """
+default_model = "kimi-code/kimi-for-coding"
+
+[models."kimi-code/kimi-for-coding"]
+provider = "managed:kimi-code"
+model = "kimi-for-coding"
+""",
+        )
+        policy = self.load_json(self.policy_path())
+        policy["role_routes"]["tester"]["cli"] = "kimi"
+        policy["role_routes"]["tester"]["model"] = "kimi-code/kimi-for-coding"
+        self.write_policy(policy)
+
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "tester.txt"
+        prompt_text = "Review Phase 4 evidence and return only the tester verdict."
+        write_text(prompt_path, prompt_text)
+
+        completed = self.run_repo_script(
+            "recursive-router-invoke.py",
+            "--repo-root",
+            str(self.repo_root),
+            "--role",
+            "tester",
+            "--prompt-file",
+            str(prompt_path),
+            "--json",
+        )
+        payload = json.loads(completed.stdout)
+        invocation_args = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["cli"], "kimi")
+        self.assertEqual(payload["output_text"], prompt_text)
+        self.assertIn("<choice>STOP</choice>", payload["raw_stdout"])
+        self.assertIn("--work-dir", invocation_args)
+        self.assertEqual(invocation_args[invocation_args.index("--work-dir") + 1], str(self.repo_root))
+        self.assertIn("--output-format", invocation_args)
+        self.assertEqual(invocation_args[invocation_args.index("--output-format") + 1], "stream-json")
+        self.assertIn("--max-ralph-iterations", invocation_args)
+        self.assertEqual(invocation_args[invocation_args.index("--max-ralph-iterations") + 1], "0")
+        self.assertNotIn("--final-message-only", invocation_args)
+
+    def test_invoke_marks_kimi_nonzero_exit_unsuccessful_even_with_output(self) -> None:
+        self.install_bootstrap()
+        self.make_fake_cli(
+            "kimi",
+            version="1.32.0",
+            invoke_exit=1,
+            emit_output_before_failure=True,
+        )
+        self.write_home_file(
+            ".kimi/config.toml",
+            """
+default_model = "kimi-code/kimi-for-coding"
+
+[models."kimi-code/kimi-for-coding"]
+provider = "managed:kimi-code"
+model = "kimi-for-coding"
+""",
+        )
+        policy = self.load_json(self.policy_path())
+        policy["role_routes"]["tester"]["cli"] = "kimi"
+        policy["role_routes"]["tester"]["model"] = "kimi-code/kimi-for-coding"
+        self.write_policy(policy)
+
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "tester.txt"
+        prompt_text = "Return TESTER_VERDICT: PASS."
+        write_text(prompt_path, prompt_text)
+
+        completed = self.run_repo_script(
+            "recursive-router-invoke.py",
+            "--repo-root",
+            str(self.repo_root),
+            "--role",
+            "tester",
+            "--prompt-file",
+            str(prompt_path),
+            "--json",
+            allowed_returncodes=(1,),
+        )
+        payload = json.loads(completed.stdout)
+
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["exit_code"], 1)
+        self.assertEqual(payload["output_text"], prompt_text)
+        self.assertIn("exit code 1", payload["reason"])
+
     def test_invoke_dispatches_prompt_bundle_through_opencode_route(self) -> None:
         self.install_bootstrap()
         self.make_fake_cli(
@@ -1062,9 +1203,9 @@ model = "kimi-for-coding"
         policy["role_routes"]["planner"]["model"] = "github-copilot/gpt-5.4-mini"
         self.write_policy(policy)
 
-        prompt_path = self.repo_root / "benchmark" / "router-prompts" / "planner.txt"
-        output_path = self.repo_root / "benchmark" / "router-outputs" / "planner.md"
-        metadata_path = self.repo_root / "benchmark" / "router-metadata" / "planner.json"
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "planner.txt"
+        output_path = self.repo_root / ".recursive" / "run" / "run-123" / "evidence" / "router" / "planner.md"
+        metadata_path = self.repo_root / ".recursive" / "run" / "run-123" / "evidence" / "router" / "planner.json"
         prompt_text = "## Covered\n- benchmark/00-requirements.md\n- src/App.tsx"
         write_text(prompt_path, prompt_text)
 
@@ -1089,10 +1230,61 @@ model = "kimi-for-coding"
         self.assertEqual(payload["decision"]["decision"], "external-cli")
         self.assertEqual(payload["cli"], "opencode")
         self.assertEqual(payload["output_text"], prompt_text)
-        self.assertEqual(payload["prompt_bundle_path"], "/benchmark/router-prompts/planner.txt")
+        self.assertEqual(payload["prompt_bundle_path"], "/.recursive/run/run-123/router-prompts/planner.txt")
         self.assertEqual(output_path.read_text(encoding="utf-8").strip(), prompt_text)
         self.assertEqual(metadata["cli"], "opencode")
         self.assertEqual(metadata["output_text"], prompt_text)
+
+    def test_invoke_rejects_raw_output_under_subagents_directory(self) -> None:
+        self.install_bootstrap()
+        self.make_fake_cli(
+            "opencode",
+            version="1.3.3",
+            models=["github-copilot/gpt-5.4-mini"],
+            require_structured_run=True,
+        )
+        policy = self.load_json(self.policy_path())
+        policy["role_routes"]["planner"]["cli"] = "opencode"
+        policy["role_routes"]["planner"]["model"] = "github-copilot/gpt-5.4-mini"
+        self.write_policy(policy)
+
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "planner.txt"
+        raw_output_path = self.repo_root / ".recursive" / "run" / "run-123" / "subagents" / "raw-kimi.md"
+        metadata_path = self.repo_root / ".recursive" / "run" / "run-123" / "subagents" / "raw-kimi.json"
+        write_text(prompt_path, "Planner prompt")
+        raw_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        output_completed = self.run_repo_script(
+            "recursive-router-invoke.py",
+            "--repo-root",
+            str(self.repo_root),
+            "--role",
+            "planner",
+            "--prompt-file",
+            str(prompt_path),
+            "--output-file",
+            str(raw_output_path),
+            "--json",
+            allowed_returncodes=(1,),
+        )
+        metadata_completed = self.run_repo_script(
+            "recursive-router-invoke.py",
+            "--repo-root",
+            str(self.repo_root),
+            "--role",
+            "planner",
+            "--prompt-file",
+            str(prompt_path),
+            "--metadata-file",
+            str(metadata_path),
+            "--json",
+            allowed_returncodes=(1,),
+        )
+
+        self.assertIn("not under subagents", output_completed.stdout + output_completed.stderr)
+        self.assertIn("not under subagents", metadata_completed.stdout + metadata_completed.stderr)
+        self.assertFalse(raw_output_path.exists())
+        self.assertFalse(metadata_path.exists())
 
     def test_invoke_dispatches_prompt_bundle_through_codex_app_server(self) -> None:
         self.install_bootstrap()
@@ -1102,7 +1294,7 @@ model = "kimi-for-coding"
         policy["role_routes"]["analyst"]["model"] = "gpt-5.4-mini"
         self.write_policy(policy)
 
-        prompt_path = self.repo_root / "benchmark" / "router-prompts" / "analyst.txt"
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "analyst.txt"
         prompt_text = "Review Bundle Path: /.recursive/run/run-123/evidence/review-bundles/analyst.md"
         write_text(prompt_path, prompt_text)
 
@@ -1126,7 +1318,7 @@ model = "kimi-for-coding"
     def test_invoke_fails_when_route_is_not_external_cli(self) -> None:
         self.install_bootstrap()
         self.make_fake_cli("codex", version="1.0.0")
-        prompt_path = self.repo_root / "benchmark" / "router-prompts" / "analyst.txt"
+        prompt_path = self.repo_root / ".recursive" / "run" / "run-123" / "router-prompts" / "analyst.txt"
         write_text(prompt_path, "Prompt bundle that should not be dispatched.")
 
         completed = self.run_repo_script(

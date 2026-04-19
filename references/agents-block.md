@@ -42,6 +42,9 @@ Required recursive-mode audit behavior:
 - Do not set `Coverage: PASS` or `Approval: PASS` for an audited phase unless the artifact ends with `Audit: PASS`.
 - Record `Subagent Capability Probe` and `Delegation Decision Basis` in every audited phase.
 - If meaningful subagent work contributes to a phase, require a durable action record under `/.recursive/run/<run-id>/subagents/` and verify it against actual files, actual recursive artifacts, and the actual diff before acceptance. For review/audit delegation, prefer a stable reviewed artifact for `Current Artifact`.
+- Store routed assistant output, raw transcripts, stdout/stderr captures, and invocation metadata under `/.recursive/run/<run-id>/evidence/router/`; cite them from action records rather than placing raw transcript Markdown directly under `subagents/`.
+- Store initial routed prompt bundles only under run-scoped paths such as `/.recursive/run/<run-id>/router-prompts/`; do not bootstrap top-level `/.recursive/router-prompts/`.
+- Treat `success: false` or any nonzero routed-assistant exit code as a failed attempt: preserve diagnostics, instruct the bounded routed role to repair owned issues when applicable, rerun the route, then verify the result before acceptance or record an explicit fallback.
 - If delegated work is accepted after main-agent checks reveal issues, record the concrete repair performed after verification; do not accept stale delegated context silently.
 - For Phase 3, declare `TDD Mode: strict|pragmatic`. Strict mode requires RED and GREEN evidence paths. Pragmatic mode requires an explicit exception rationale plus compensating evidence.
 - For Phase 5, declare `QA Execution Mode: human|agent-operated|hybrid`. Human and hybrid require user sign-off. Agent-operated and hybrid require execution metadata plus evidence paths.

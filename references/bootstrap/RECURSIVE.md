@@ -310,7 +310,15 @@ Do not rely on stale chat context, earlier prompt text, or previously remembered
 
 If routed delegation has been requested or the current task is already operating under routed policy, prefer the canonical `recursive-router` resolve/invoke path over hardcoded provider or model strings.
 
+An active configured external route is policy, not a hint. When the selected role resolves to `external-cli`, the controller must dispatch through the canonical resolve/invoke path before claiming that delegated role was satisfied. Do not substitute local implementation, testing, review, or audit work just because the local path is faster or the change seems narrow.
+
 If the effective route is unresolved, blocked, or falls back to `self-audit` or local execution, record that outcome explicitly in the phase artifact or subagent action record instead of silently bypassing routing.
+
+When running from an isolated worktree, the routing policy and discovery inventory must be present and current in that worktree before route resolution. Discovery inventory is local and may be untracked, so refresh it with the router probe or copy the intended inventory from the controller/source repo before invoking a routed role.
+
+The orchestrator may reject routed output after checking it against actual files, actual diffs, and actual recursive artifacts, then repair locally. If that happens, record the routed rejection and the concrete local repair; do not present the repair as evidence that the routed role performed or verified the work.
+
+If `recursive-router-invoke` returns `success: false`, records a nonzero `exit_code`, or returns findings that the bounded routed role is responsible for fixing, the attempt is not acceptable phase evidence. Preserve routed output, stdout/stderr captures, and invocation metadata under `/.recursive/run/<run-id>/evidence/router/`, record a failed action record or phase note, instruct the routed role to fix the concrete issue when that role has bounded ownership, rerun the routed invocation, and repeat controller verification. If the route cannot produce an acceptable zero-exit result, record the fallback before relying on local repair or self-audit evidence.
 
 When routed delegation is used, the relevant phase artifact, review bundle, or action record should cite:
 
@@ -324,6 +332,8 @@ When routed delegation is used, the relevant phase artifact, review bundle, or a
 Any meaningful subagent invocation must leave a durable action record under:
 
 - `/.recursive/run/<run-id>/subagents/`
+
+Routed assistant output, raw transcripts, stdout/stderr captures, and invocation metadata are evidence, not action records. Store them under the run evidence tree, preferably `/.recursive/run/<run-id>/evidence/router/`, and cite them from the generated action record. Initial prompt bundles are dispatch inputs for a concrete run; keep them under a run-scoped prompt-bundle location such as `/.recursive/run/<run-id>/router-prompts/` and cite them as `Prompt Bundle Path`. Do not bootstrap top-level `/.recursive/router-prompts/` in reusable repos. Do not place raw transcript Markdown files directly in `subagents/`; the run linter treats every Markdown file in that directory as a canonical subagent action record.
 
 The action record is the canonical claim record for what the subagent says it did. The main agent must verify that record against the actual worktree diff, the actual files, the review bundle when present, and the relevant recursive artifacts before accepting the result.
 
