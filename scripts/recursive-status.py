@@ -135,6 +135,16 @@ def load_lint_module():
     return module
 
 
+def load_phase_rules_module():
+    module_path = Path(__file__).with_name("recursive_phase_rules.py")
+    spec = importlib.util.spec_from_file_location("recursive_phase_rules", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load phase rules module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def trim_md_value(value: str) -> str:
     trimmed = value.strip()
     for quote in ("`", '"', "'"):
@@ -2028,6 +2038,29 @@ def main() -> None:
     print()
     print_phase_status(phases, states, args.show_hashes, run_id, workflow_profile)
 
+    # Next-legal-phase and stale-chain summary using the canonical phase-rules model.
+    phase_rules = load_phase_rules_module()
+    next_legal = phase_rules.get_next_legal_phase(run_dir)
+    stale_entries = phase_rules.get_all_stale_receipts(run_dir)
+
+    if next_legal:
+        print(f"Next Legal Phase: {next_legal}")
+        prereq_blockers = phase_rules.get_prerequisite_blockers(next_legal, run_dir)
+        if prereq_blockers:
+            print("  Prerequisite blockers:")
+            for blocker in prereq_blockers:
+                print(f"    - {blocker['artifact']}: {blocker['status']}")
+    elif current_phase is None:
+        print("Next Legal Phase: COMPLETE (all phases locked)")
+    else:
+        print("Next Legal Phase: BLOCKED")
+        print("  All candidate phases have unresolved prerequisites.")
+
+    if stale_entries:
+        print()
+        print("Stale Lock-Chain Receipts (re-lock downstream phases in order):")
+        for entry in stale_entries:
+            print(f"  - {entry['artifact']}: {entry['reason']}")
     print()
     if current_phase is None:
         print("Current Phase: COMPLETE")

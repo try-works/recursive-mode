@@ -9,10 +9,21 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def load_phase_rules_module():
+    module_path = Path(__file__).with_name("recursive_phase_rules.py")
+    spec = importlib.util.spec_from_file_location("recursive_phase_rules", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load phase rules module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 STATUS_RE = re.compile(r'(?m)^[ \t]*Status:\s*(?:`|")?(\w+)(?:`|")?\s*$')
@@ -195,6 +206,9 @@ def main() -> int:
     valid_runs = 0
     fixed_runs = 0
     failed_runs = 0
+    stale_chain_runs = 0
+
+    phase_rules = load_phase_rules_module()
 
     for run in runs:
         total_runs += 1
@@ -283,8 +297,22 @@ def main() -> int:
                         write_status("FAIL", f"  {addendum.name}: {result.error}")
                         run_valid = False
 
+        # Stale-chain detection: check whether any prerequisite hash in a receipt
+        # no longer matches the current artifact content.
+        stale_entries = phase_rules.get_all_stale_receipts(run_dir)
+        run_stale = False
+        if stale_entries:
+            print("\nStale lock-chain receipts:")
+            for entry in stale_entries:
+                write_status("WARN", f"  {entry['artifact']}: {entry['reason']}")
+                run_stale = True
+
         print()
-        if run_valid and not run_fixed:
+        if run_stale:
+            stale_chain_runs += 1
+            run_valid = False
+            write_status("WARN", f"Run '{run}': Stale lock-chain receipts detected (re-lock in phase order)")
+        elif run_valid and not run_fixed:
             valid_runs += 1
             write_status("PASS", f"Run '{run}': All locks valid")
         elif run_fixed:
@@ -300,15 +328,20 @@ def main() -> int:
     print("=====================\n")
     print(f"Total runs checked: {total_runs}")
     write_status("PASS", f"Valid runs: {valid_runs}")
+    if stale_chain_runs > 0:
+        write_status("WARN", f"Stale-chain runs: {stale_chain_runs}")
     if fixed_runs > 0:
         write_status("WARN", f"Fixed runs (tampered): {fixed_runs}")
     if failed_runs > 0:
         write_status("FAIL", f"Failed runs: {failed_runs}")
     print()
 
-    if failed_runs == 0:
+    if failed_runs == 0 and stale_chain_runs == 0:
         write_status("PASS", "All locks verified successfully")
         return 0
+    if failed_runs == 0:
+        write_status("WARN", "Lock hashes valid but stale-chain receipts detected")
+        return 1
     write_status("FAIL", "Some locks failed verification")
     return 1
 

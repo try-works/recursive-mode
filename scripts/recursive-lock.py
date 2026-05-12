@@ -17,6 +17,16 @@ from pathlib import Path
 LOCK_HASH_LINE_RE = re.compile(r"(?m)^[ \t]*LockHash:.*(?:\n|$)")
 
 
+def load_phase_rules_module():
+    module_path = Path(__file__).with_name("recursive_phase_rules.py")
+    spec = importlib.util.spec_from_file_location("recursive_phase_rules", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load phase rules module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_lint_module():
     module_path = Path(__file__).with_name("lint-recursive-run.py")
     spec = importlib.util.spec_from_file_location("recursive_mode_lint", module_path)
@@ -162,11 +172,49 @@ def resolve_artifact_path(run_dir: Path, artifact_arg: str) -> Path:
     return artifact_path
 
 
+def reopen_artifact(phase_rules, run_dir: Path, artifact_path: Path, repo_root: Path) -> int:
+    """
+    Revert a locked artifact back to DRAFT status and invalidate all downstream
+    lock receipts so they must be re-locked in order.
+    """
+    content = artifact_path.read_text(encoding="utf-8")
+    status_re = re.compile(r"(?m)^[ \t]*Status:.*$")
+    locked_at_re = re.compile(r"(?m)^[ \t]*LockedAt:.*\n?")
+    hash_re = re.compile(r"(?m)^[ \t]*LockHash:.*\n?")
+
+    updated = status_re.sub("Status: `DRAFT`", content, count=1)
+    updated = locked_at_re.sub("", updated, count=1)
+    updated = hash_re.sub("", updated, count=1)
+
+    temp_path = artifact_path.with_name(f".{artifact_path.name}.tmp")
+    temp_path.write_text(updated, encoding="utf-8", newline="\n")
+    temp_path.replace(artifact_path)
+
+    rel = artifact_path.relative_to(repo_root)
+    print(f"[OK] Reopened {rel}: reverted to DRAFT")
+
+    artifact_name = artifact_path.name
+    if phase_rules.is_core_artifact(artifact_name):
+        removed = phase_rules.invalidate_receipt(run_dir, artifact_name)
+        if removed:
+            print(f"[OK] Invalidated lock receipt for {artifact_name}")
+
+        stale = phase_rules.get_stale_downstream_phases(artifact_name, run_dir)
+        if stale:
+            print("[WARN] The following downstream phases have stale receipts; re-lock them in order after fixing this phase:")
+            for entry in stale:
+                phase_rules.invalidate_receipt(run_dir, entry["artifact"])
+                print(f"  - {entry['artifact']}: {entry['reason']} (receipt invalidated)")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Lock a recursive-mode artifact after validating gates and structure.")
     parser.add_argument("--run-id", required=True, help="Run ID under .recursive/run/.")
     parser.add_argument("--artifact", required=True, help="Artifact file inside the run directory, e.g. 04-test-summary.md or addenda/foo.addendum-01.md")
     parser.add_argument("--repo-root", default=".", help="Repository root path.")
+    parser.add_argument("--reopen", action="store_true", help="Reopen a locked artifact: revert to DRAFT, remove lock metadata, and invalidate downstream receipts.")
     args = parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
@@ -184,6 +232,21 @@ def main() -> int:
     if not artifact_path.exists():
         print(f"[FAIL] Artifact not found: {artifact_path}")
         return 1
+
+    phase_rules = load_phase_rules_module()
+
+    if args.reopen:
+        return reopen_artifact(phase_rules, run_dir, artifact_path, repo_root)
+
+    # Prerequisite gate: all earlier phases that exist must be LOCKED first.
+    artifact_name = artifact_path.name
+    if phase_rules.is_core_artifact(artifact_name):
+        blockers = phase_rules.get_prerequisite_blockers(artifact_name, run_dir)
+        if blockers:
+            print(f"[FAIL] Cannot lock {artifact_path.relative_to(repo_root)}: prerequisite phases are not yet LOCKED")
+            for blocker in blockers:
+                print(f"  - {blocker['artifact']}: {blocker['status']} ({blocker['path']})")
+            return 1
 
     lint = load_lint_module()
     issues, content, workflow_profile = validate_lockable(lint, repo_root, run_dir, artifact_path)
@@ -212,6 +275,18 @@ def main() -> int:
     temp_path = artifact_path.with_name(f".{artifact_path.name}.tmp")
     temp_path.write_text(final_content, encoding="utf-8", newline="\n")
     temp_path.replace(artifact_path)
+
+    # Write lock receipt for chain tracking.
+    if phase_rules.is_core_artifact(artifact_name):
+        phase_rules.write_receipt(run_dir, artifact_name, artifact_path)
+
+    # Report stale downstream phases so the caller knows what needs re-locking.
+    if phase_rules.is_core_artifact(artifact_name):
+        stale = phase_rules.get_stale_downstream_phases(artifact_name, run_dir)
+        if stale:
+            print(f"[WARN] The following downstream phases have stale receipts and may need re-locking:")
+            for entry in stale:
+                print(f"  - {entry['artifact']}: {entry['reason']}")
 
     print(f"[OK] Locked {artifact_path.relative_to(repo_root)}")
     print(f"Workflow Profile: {workflow_profile}")

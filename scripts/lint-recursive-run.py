@@ -7,11 +7,21 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+
+def load_phase_rules_module():
+    module_path = Path(__file__).with_name("recursive_phase_rules.py")
+    spec = importlib.util.spec_from_file_location("recursive_phase_rules", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load phase rules module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 CURRENT_WORKFLOW_PROFILE = "recursive-mode-audit-v2"
 STRICT_WORKFLOW_PROFILE = "recursive-mode-audit-v1"
@@ -2796,6 +2806,23 @@ def main() -> None:
                 for issue in issues:
                     total_fail += 1
                     write_issue("FAIL", action_record, issue)
+
+        # Phase-sequence prerequisite check: if a later artifact exists, all
+        # earlier phases that also exist must already be LOCKED.  This catches
+        # backfilled or out-of-order artifact creation.
+        phase_rules = load_phase_rules_module()
+        for artifact in expected_artifacts:
+            artifact_path = run_dir / artifact
+            if not artifact_path.exists():
+                continue
+            blockers = phase_rules.get_prerequisite_blockers(artifact, run_dir)
+            for blocker in blockers:
+                total_fail += 1
+                write_issue(
+                    "FAIL",
+                    artifact_path,
+                    f"Phase-sequence violation: {artifact!r} exists but prerequisite {blocker['artifact']!r} is {blocker['status']} (must be LOCKED first)",
+                )
 
         if workflow_profile in (STRICT_WORKFLOW_PROFILES | {COMPAT_WORKFLOW_PROFILE}):
             late_requirements = [
