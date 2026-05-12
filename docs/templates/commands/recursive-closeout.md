@@ -31,6 +31,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-closeout.ps1" -RepoRoot . -
 - Scaffolds late-phase requirement disposition lines using the current machine-checkable status model
 - Includes `/.recursive/memory/skills/SKILLS.md` in Phase 8 closeout scaffolds so skill-memory maintenance is explicit
 - For Phase 8, scaffolds `## Run-Local Skill Usage Capture` and `## Skill Memory Promotion Review` so skill lessons are captured before they are promoted into durable memory
+- If Phase 8 is already locked, rerunning `recursive-closeout` for phase `08` calls `/.recursive/scripts/recursive-training-phase8-trigger.py --auto`
 
 ## Preview URL Capture
 
@@ -43,3 +44,4 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-closeout.ps1" -RepoRoot . -
 1. Scaffold the closeout phase with `recursive-closeout`.
 2. Replace the scaffold guidance with the actual evidence, decisions, state, or memory changes.
 3. Run `recursive-lock` only after the phase content is complete and the required gates pass.
+4. After locking Phase 8, rerun `recursive-closeout` for phase `08` without `--force` if you want the built-in training trigger hook to fire from this helper.

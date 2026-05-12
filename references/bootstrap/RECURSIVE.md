@@ -61,6 +61,7 @@ recursive-mode maintains a separate durable memory plane under:
 - `/.recursive/memory/patterns/`
 - `/.recursive/memory/incidents/`
 - `/.recursive/memory/episodes/`
+- `/.recursive/memory/training/`
 - `/.recursive/memory/skills/SKILLS.md`
 - `/.recursive/memory/skills/availability/`
 - `/.recursive/memory/skills/usage/`
@@ -89,6 +90,8 @@ Required read behavior:
 - If relevant prior runs are found, read only the docs needed from those runs to understand the affected codebase areas before writing the new run artifacts.
 - If no relevant prior runs are identified, skip that step.
 - After reading `MEMORY.md`, load only the memory docs relevant to the current task. Do not load the entire memory tree by default.
+- If the task may benefit from prior experiential learnings, load only the relevant docs under `/.recursive/memory/training/` and `/.recursive/memory/domains/`, preferably by using the training loader with filesystem-backed discovery.
+- If the optional `recursive-training` skill is installed, run `/.recursive/scripts/recursive-training-loader.py` after reading `MEMORY.md` and before planning or implementation whenever the task may benefit from experiential memory. If no automatic hook is wired, the agent must still manually load relevant training docs from the memory index when they matter.
 - If the run plans delegated review, subagent help, review bundles, smoke harness portability work, or other skill-sensitive execution, load `/.recursive/memory/skills/SKILLS.md` and the relevant skill-memory shards before planning or auditing.
 - Prefer `Status: CURRENT` memory docs for planning/execution.
 - `Status: SUSPECT` memory docs may be used as leads but must be revalidated before trust.
@@ -138,6 +141,7 @@ Supported memory doc types:
 - `pattern`
 - `incident`
 - `episode`
+- `training`
 
 Skill memory is a first-class part of the memory plane. Use `/.recursive/memory/skills/SKILLS.md` as the skill-memory router and shard durable skill knowledge under:
 
@@ -145,6 +149,8 @@ Skill memory is a first-class part of the memory plane. Use `/.recursive/memory/
 - `skills/usage/` for stable skill fit and usage guidance
 - `skills/issues/` for recurring skill failures or confusing behavior
 - `skills/patterns/` for reusable multi-skill operating patterns
+
+Training memory is a separate first-class part of the memory plane. Use `/.recursive/memory/training/` for experiential learnings extracted from completed recursive-mode runs and keyed by recurring task type, workflow shape, or other reusable operational pattern.
 
 Phase 8 must update skill memory when a run teaches the repository something durable about skill availability, skill fit, delegated review quality, or repeated workflow friction.
 Phase 8 must also record a run-local skill-usage capture before deciding what, if anything, is worth promoting into durable skill memory.
@@ -180,6 +186,7 @@ Freshness rules:
 
 - `domain` docs use `Owns-Paths` for primary ownership of code surfaces.
 - `pattern` and `incident` docs may declare `Watch-Paths` without being the primary owner.
+- `training` docs do not own product paths; they should use `Watch-Paths` or equivalent applicability guidance to record where the learning tends to apply.
 - If a final validated code diff touches a path matched by `Owns-Paths` or `Watch-Paths`, that memory doc must be reviewed in Phase 8.
 - Affected `CURRENT` docs must be downgraded to `SUSPECT` until semantic review is complete.
 - Only after semantic review against final code, `STATE.md`, and `DECISIONS.md` may a `SUSPECT` doc return to `CURRENT`.
@@ -552,6 +559,7 @@ Phase 8 — Memory maintenance and impact review
 - Audit must verify memory updates and status transitions against reviewed final product/worktree paths, touched memory docs, prior memory truth, `STATE.md`, and `DECISIONS.md`
 - Must include `## Run-Local Skill Usage Capture` with concrete availability / attempted / used / worked-well / issue / recommendation fields whenever skill usage is relevant to the run
 - Must include `## Skill Memory Promotion Review` explaining what durable lessons were promoted, what stayed run-local, and why
+- If the optional `recursive-training` skill is installed, run `/.recursive/scripts/recursive-training-phase8-trigger.py` immediately after `08-memory-impact.md` locks to extract or refresh cross-run experiential learnings. `recursive-closeout` itself does not auto-invoke the trigger.
 - **TODO Requirement:** Phase artifact MUST include `## TODO` section with checkable items
 - **TODO Enforcement:** ALL TODO items must be checked off before locking
 - **Completion rule:** the run is not fully complete before Phase 8 passes

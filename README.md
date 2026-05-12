@@ -22,6 +22,7 @@ This repo currently ships these default installable skills:
 - `recursive-review-bundle`
 - `recursive-router`
 - `recursive-subagent`
+- `recursive-training`
 
 Optional add-on source:
 
@@ -38,6 +39,7 @@ Optional add-on source:
 | `recursive-review-bundle` | Builds canonical review bundles for delegated Phase 3.5 review. |
 | `recursive-router` | Routes delegated subagent roles through configured external transports, CLIs, and models while preserving explicit fallback and controller verification. The current CLI/IDE/agent remains the orchestrator; routed CLIs only handle bounded delegated work with a real context bundle. Opt-in only: use it when the user explicitly asks to route or set up model/provider bindings. |
 | `recursive-subagent` | Helps delegate bounded implementation, audit, or review work and verify the results. |
+| `recursive-training` | Extracts durable experiential knowledge from completed recursive-mode runs into `/.recursive/memory/`, keeps `MEMORY.md` as the discovery index, and provides read-only startup guidance plus loader-based retrieval for new runs. |
 
 Optional add-on:
 
@@ -65,6 +67,7 @@ The workflow package includes functionality for:
 - recording machine-specific router launcher details in policy via `cli_overrides` or `custom_clis` when the working CLI entrypoint differs across operating systems, shells, or devices
 - recording and checking subagent contributions before they are accepted
 - updating decisions, state, and memory as part of closeout
+- extracting reusable experiential learnings from completed runs into `/.recursive/memory/training/` and reusing them through the memory index
 - maintaining reusable skill-memory and capability guidance over time
 
 ## Workflow Overview
@@ -199,6 +202,7 @@ After installing the skill package into your agent environment, the intended nor
 2. if requirements do not exist yet, use `recursive-spec` to draft them from plan/spec prompts such as `create a plan`, `help me plan`, or `create a spec`
 3. invoke recursive-mode with a short command such as `Implement the run`
 4. if `/.recursive/` is missing, the skill should auto-bootstrap it before continuing
+5. after the repo has accumulated completed runs, use `recursive-training` to promote durable experiential learnings into `/.recursive/memory/`
 
 `recursive-spec` is intentionally approval-gated: it should collaborate on the draft first, keep that draft in temporary/session storage, and only create `/.recursive/run/<run-id>/00-requirements.md` after the user approves the spec.
 

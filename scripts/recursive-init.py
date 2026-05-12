@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -81,6 +82,46 @@ def validate_phase0_diff_basis(repo_root: Path, run_dir: Path) -> str | None:
     diff_basis = lint.get_run_diff_basis(run_dir)
     _normalized_basis, error = lint.normalize_diff_basis(repo_root, diff_basis)
     return error
+
+
+def build_training_loader_query(run_id: str, template: str, from_issue: str) -> str:
+    run_phrase = re.sub(r"[-_]+", " ", run_id).strip()
+    parts = [f"{template.strip()} recursive run".strip()]
+    if run_phrase:
+        parts.append(run_phrase)
+    if from_issue.strip():
+        parts.append(from_issue.strip())
+    return " ".join(part for part in parts if part)
+
+
+def run_training_loader(repo_root: Path, run_id: str, template: str, from_issue: str) -> int:
+    loader_script = repo_root / ".recursive" / "scripts" / "recursive-training-loader.py"
+    if not loader_script.exists():
+        print("[INFO] recursive-training loader not installed; skipping experiential memory load.")
+        return 0
+
+    query = build_training_loader_query(run_id, template, from_issue)
+    command = [
+        sys.executable,
+        str(loader_script),
+        "--repo-root",
+        str(repo_root),
+        "--query",
+        query,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip() or "no diagnostics emitted"
+        print(f"[WARN] recursive-training loader failed: {details}")
+        print("[WARN] Continuing without loaded experiential memory.")
+        return 0
+
+    print("[OK] Loaded repository memory context via recursive-training.")
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())
+    return 0
 
 
 def requirements_content(run_id: str, template: str, from_issue: str) -> str:
@@ -297,6 +338,10 @@ def main() -> None:
         print("       Fix the Phase 0 diff-basis fields before locking or relying on downstream audit tooling.")
         return 1
     print("[OK] Phase 0 diff basis is executable against live git state.")
+
+    training_status = run_training_loader(repo_root, args.run_id, args.template, args.from_issue)
+    if training_status != 0:
+        return training_status
 
     print()
     print("Next steps:")

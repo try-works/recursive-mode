@@ -8,6 +8,9 @@ Behavior is shared with install-recursive-mode.ps1:
 - creates a lightweight .recursive/AGENTS.md router for internal doc discovery
 - upserts the primary Codex AGENTS bridge into .codex/AGENTS.md
 - upserts the primary Codex plans bridge into .agent/PLANS.md
+- upserts stable assistant-memory pointers into .cursorrules, CLAUDE.md, and .github/copilot-instructions.md
+- bootstraps training memory under .recursive/memory/training/
+- copies recursive-training runtime scripts into .recursive/scripts/
 - ensures the routed delegation policy scaffold exists under .recursive/config/
 - adds the device-local router discovery inventory to .gitignore
 - mirrors the AGENTS bridge into repo-root AGENTS.md when that file already exists
@@ -127,7 +130,7 @@ def memory_router_body() -> str:
     return """## Memory Router
 
 This file is the durable memory router for the repository.
-It is not a knowledge dump. Store durable memory in sharded docs under `domains/`, `patterns/`, `incidents/`, `episodes/`, `skills/`, or `archive/`.
+It is not a knowledge dump. Store durable memory in sharded docs under `domains/`, `patterns/`, `incidents/`, `episodes/`, `training/`, `skills/`, or `archive/`.
 
 Control-plane docs are not memory docs:
 - `/.recursive/RECURSIVE.md`
@@ -141,6 +144,8 @@ Control-plane docs are not memory docs:
 
 - Read this file before loading any other memory docs.
 - Load only the memory docs relevant to the current task.
+- If the task may benefit from prior recursive-mode experiential learnings, use this index to identify the relevant docs under `/.recursive/memory/training/` and `/.recursive/memory/domains/`.
+- The optional `recursive-training-sync.py` helper is read-only; it prints startup guidance about what to read, but does not modify `MEMORY.md` or the memory plane.
 - If the task plans delegated review, subagent help, review bundles, smoke-harness portability work, or capability-sensitive execution, read `/.recursive/memory/skills/SKILLS.md` and then load the relevant skill-memory shards.
 - If Phase 8 will need to promote durable lessons, first capture run-local skill usage in the run artifact and only then promote generalized conclusions into skill-memory shards.
 - Prefer `Status: CURRENT` docs for planning and execution.
@@ -153,6 +158,7 @@ Control-plane docs are not memory docs:
 - `patterns/` - reusable playbooks and solution patterns
 - `incidents/` - recurring failure signatures and fixes
 - `episodes/` - distilled lessons from specific runs
+- `training/` - extracted experiential learnings promoted from completed recursive-mode runs
 - `skills/` - durable skill and capability memory, routed via `skills/SKILLS.md`
 - `archive/` - historical or deprecated memory docs
 
@@ -162,6 +168,7 @@ Control-plane docs are not memory docs:
 - Any doc whose `Owns-Paths` or `Watch-Paths` overlaps final changed code paths must be reviewed in Phase 8.
 - Affected `CURRENT` docs should be downgraded to `SUSPECT` until revalidated against final code, `STATE.md`, and `DECISIONS.md`.
 - If changed paths have no owning domain doc, create one or record the uncovered-path follow-up in `08-memory-impact.md`.
+- Training memory docs should keep their canonical content under `/.recursive/memory/training/`, use the memory index as the discovery surface, and record source runs plus watch-path or applicability guidance.
 - Skill-memory docs should record source runs, last validated date, environment notes, and current trust/fit guidance.
 - If a run materially teaches the repo something about skill availability, delegated-review quality, review-bundle usage, or toolchain fallback behavior, Phase 8 must either create/refresh a skill-memory shard or record why no durable lesson was promoted.
 - If the repo itself is a reusable skill/workflow distribution, durable memory must remain generalized. Do not store current-session run residue or temp-environment observations as if they were universal truth.
@@ -210,7 +217,40 @@ Keep this file concise. Link to child docs instead of duplicating them.
 - `/.recursive/memory/skills/usage/skill-discovery-and-evaluation.md`
 - `/.recursive/memory/skills/patterns/delegated-verification-and-refresh.md`
 - `/.recursive/memory/skills/patterns/phase8-skill-memory-promotion.md`
-- Add child docs here only when they are intentionally promoted as reusable repository guidance.
+    - Add child docs here only when they are intentionally promoted as reusable repository guidance.
+    """
+
+
+def cursorrules_memory_pointers_body() -> str:
+    return """# recursive-mode memory pointers
+# Canonical repository memory lives under `/.recursive/memory/`.
+# Read `/.recursive/memory/MEMORY.md` before loading any other memory docs.
+# Load only the memory docs relevant to the current task.
+# When repository experiential memory may help, run:
+#   python .recursive/scripts/recursive-training-loader.py --repo-root . --query "<task>" --files "<path1,path2>"
+# This file is only a pointer surface; the canonical memory store remains `/.recursive/memory/`.
+"""
+
+
+def claude_memory_pointers_body() -> str:
+    return """## recursive-mode memory pointers
+
+- Canonical repository memory lives under `/.recursive/memory/`.
+- Read `/.recursive/memory/MEMORY.md` before loading any other memory docs.
+- Load only the memory docs relevant to the current task.
+- When repository experiential memory may help, run `python .recursive/scripts/recursive-training-loader.py --repo-root . --query "<task>" --files "<path1,path2>"`.
+- Treat this file as a pointer only; the canonical memory store remains `/.recursive/memory/`.
+"""
+
+
+def copilot_memory_pointers_body() -> str:
+    return """## recursive-mode memory pointers
+
+- Canonical repository memory lives under `/.recursive/memory/`.
+- Read `/.recursive/memory/MEMORY.md` before loading any other memory docs.
+- Load only the memory docs relevant to the current task.
+- When repository experiential memory may help, run `python .recursive/scripts/recursive-training-loader.py --repo-root . --query "<task>" --files "<path1,path2>"`.
+- Treat this file as a pointer only; the canonical memory store remains `/.recursive/memory/`.
 """
 
 
@@ -432,6 +472,9 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/skills/recursive-review-bundle/SKILL.md`
 - Working on memory behavior:
   - `/.recursive/memory/MEMORY.md`
+  - `/skills/recursive-training/SKILL.md`
+  - `/.recursive/scripts/recursive-training-loader.py`
+  - `/.recursive/memory/training/`
   - `/.recursive/memory/skills/SKILLS.md`
 
 ## Non-Canonical Bridges
@@ -522,11 +565,16 @@ def main() -> None:
     state_path = recursive_root / "STATE.md"
     decisions_path = recursive_root / "DECISIONS.md"
     memory_router_path = memory_root / "MEMORY.md"
+    training_memory_root = memory_root / "training"
     skill_memory_root = memory_root / "skills"
     skill_memory_router_path = skill_memory_root / "SKILLS.md"
     skill_discovery_path = skill_memory_root / "usage" / "skill-discovery-and-evaluation.md"
     delegated_verification_path = skill_memory_root / "patterns" / "delegated-verification-and-refresh.md"
     phase8_skill_memory_path = skill_memory_root / "patterns" / "phase8-skill-memory-promotion.md"
+    cursorrules_path = repo_root / ".cursorrules"
+    claude_path = repo_root / "CLAUDE.md"
+    github_root = repo_root / ".github"
+    copilot_instructions_path = github_root / "copilot-instructions.md"
     codex_agents_path = codex_root / "AGENTS.md"
     root_agents_path = repo_root / "AGENTS.md"
     plans_path = agent_root / "PLANS.md"
@@ -539,20 +587,58 @@ def main() -> None:
     agents_end_marker = "<!-- RECURSIVE-MODE-AGENTS:END -->"
     plans_start_marker = "<!-- RECURSIVE-MODE-PLANS-BRIDGE:START -->"
     plans_end_marker = "<!-- RECURSIVE-MODE-PLANS-BRIDGE:END -->"
+    cursorrules_start_marker = "# RECURSIVE-MODE-MEMORY-POINTERS:START"
+    cursorrules_end_marker = "# RECURSIVE-MODE-MEMORY-POINTERS:END"
+    repo_md_start_marker = "<!-- RECURSIVE-MODE-MEMORY-POINTERS:START -->"
+    repo_md_end_marker = "<!-- RECURSIVE-MODE-MEMORY-POINTERS:END -->"
 
     ensure_directory(recursive_root)
     ensure_directory(codex_root)
     ensure_directory(agent_root)
+    ensure_directory(github_root)
     ensure_directory(memory_root)
+    ensure_directory(training_memory_root)
     ensure_directory(skill_memory_root)
     ensure_directory(run_root)
     ensure_directory(config_root)
     for subdir in ("domains", "patterns", "incidents", "episodes", "archive"):
         ensure_directory(memory_root / subdir)
         ensure_file(memory_root / subdir / ".gitkeep", "")
+    ensure_file(training_memory_root / ".gitkeep", "")
     for subdir in ("availability", "usage", "issues", "patterns"):
         ensure_directory(skill_memory_root / subdir)
         ensure_file(skill_memory_root / subdir / ".gitkeep", "")
+
+    # Copy training scripts into .recursive/scripts/ for runtime use
+    scripts_dest = recursive_root / "scripts"
+    ensure_directory(scripts_dest)
+    training_scripts = [
+        "recursive-training-grpo.py",
+        "recursive-training-grpo.ps1",
+        "recursive-training-phase8-trigger.py",
+        "recursive-training-phase8-trigger.ps1",
+        "recursive-training-extract.py",
+        "recursive-training-extract.ps1",
+        "recursive-training-sync.py",
+        "recursive-training-sync.ps1",
+        "recursive-training-loader.py",
+        "recursive-training-loader.ps1",
+        "recursive-training-mcp.py",
+        "recursive-training-mcp.ps1",
+    ]
+    skill_scripts_dir = skill_root / "scripts"
+    for script_name in training_scripts:
+        src = skill_scripts_dir / script_name
+        dst = scripts_dest / script_name
+        if src.exists():
+            content = src.read_text(encoding="utf-8")
+            if not dst.exists() or dst.read_text(encoding="utf-8") != content:
+                dst.write_text(content, encoding="utf-8")
+                print(f"[OK] Copied training script: {dst}")
+            else:
+                print(f"[OK] Up to date: {dst}")
+        else:
+            print(f"[WARN] Missing training script in skill repo: {src}")
 
     ensure_file(run_root / ".gitkeep", "")
     ensure_file(recursive_path, "# RECURSIVE.md\n")
@@ -566,6 +652,9 @@ def main() -> None:
     ensure_file(phase8_skill_memory_path, phase8_skill_memory_doc())
     ensure_file(codex_agents_path, "# AGENTS.md\n")
     ensure_file(plans_path, "# PLANS.md\n")
+    ensure_file(cursorrules_path, "")
+    ensure_file(claude_path, "")
+    ensure_file(copilot_instructions_path, "")
     ensure_gitignore_line(repo_root, "/.recursive/config/recursive-router-discovered.json")
     try:
         ensure_router_scaffold(repo_root)
@@ -589,6 +678,24 @@ def main() -> None:
         memory_start_marker,
         memory_end_marker,
         skill_memory_router_body().rstrip("\r\n"),
+    )
+    upsert_marked_block(
+        cursorrules_path,
+        cursorrules_start_marker,
+        cursorrules_end_marker,
+        cursorrules_memory_pointers_body().rstrip("\r\n"),
+    )
+    upsert_marked_block(
+        claude_path,
+        repo_md_start_marker,
+        repo_md_end_marker,
+        claude_memory_pointers_body().rstrip("\r\n"),
+    )
+    upsert_marked_block(
+        copilot_instructions_path,
+        repo_md_start_marker,
+        repo_md_end_marker,
+        copilot_memory_pointers_body().rstrip("\r\n"),
     )
 
     if not agents_block_path.exists():

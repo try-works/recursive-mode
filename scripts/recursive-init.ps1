@@ -390,6 +390,69 @@ function Test-Phase0DiffBasis {
     return $null
 }
 
+function Get-TrainingLoaderQuery {
+    param(
+        [Parameter(Mandatory = $true)][string]$RunId,
+        [Parameter(Mandatory = $true)][string]$Template,
+        [string]$FromIssue
+    )
+
+    $runPhrase = (($RunId -replace '[-_]+', ' ').Trim())
+    $parts = @()
+    $base = ("{0} recursive run" -f $Template).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($base)) {
+        $parts += $base
+    }
+    if (-not [string]::IsNullOrWhiteSpace($runPhrase)) {
+        $parts += $runPhrase
+    }
+    if (-not [string]::IsNullOrWhiteSpace($FromIssue)) {
+        $parts += $FromIssue.Trim()
+    }
+    return ($parts -join " ")
+}
+
+function Invoke-TrainingLoader {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$RunId,
+        [Parameter(Mandatory = $true)][string]$Template,
+        [string]$FromIssue
+    )
+
+    $loaderPath = Join-Path $RepoRoot ".recursive\scripts\recursive-training-loader.py"
+    if (-not (Test-Path -LiteralPath $loaderPath)) {
+        Write-Host "[INFO] recursive-training loader not installed; skipping experiential memory load."
+        return $true
+    }
+
+    $python = if ($env:PYTHON) { $env:PYTHON } elseif (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { $null }
+    if (-not $python) {
+        Write-Host "[WARN] Python executable not found; cannot run recursive-training loader."
+        Write-Host "[WARN] Continuing without loaded experiential memory."
+        return $true
+    }
+
+    $query = Get-TrainingLoaderQuery -RunId $RunId -Template $Template -FromIssue $FromIssue
+    $output = & $python $loaderPath "--repo-root" $RepoRoot "--query" $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $details = (($output | Out-String).Trim())
+        if ([string]::IsNullOrWhiteSpace($details)) {
+            $details = "no diagnostics emitted"
+        }
+        Write-Host ("[WARN] recursive-training loader failed: {0}" -f $details)
+        Write-Host "[WARN] Continuing without loaded experiential memory."
+        return $true
+    }
+
+    Write-Host "[OK] Loaded repository memory context via recursive-training."
+    $rendered = (($output | Out-String).Trim())
+    if (-not [string]::IsNullOrWhiteSpace($rendered)) {
+        Write-Host $rendered
+    }
+    return $true
+}
+
 $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
 Write-Host ("[INFO] Repo root: {0}" -f $resolvedRepoRoot)
 
@@ -443,6 +506,7 @@ if ($diffBasisError) {
 }
 
 Write-Host "[OK] Phase 0 diff basis is executable against live git state."
+[void](Invoke-TrainingLoader -RepoRoot $resolvedRepoRoot -RunId $RunId -Template $Template -FromIssue $FromIssue)
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host ("1) Edit: .recursive/run/{0}/00-requirements.md" -f $RunId)

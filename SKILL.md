@@ -108,6 +108,16 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `scripts/verify-locks.ps1`
 - `scripts/check-reusable-repo-hygiene.py`
 - `scripts/check-reusable-repo-hygiene.ps1`
+- `.recursive/scripts/recursive-training-grpo.py`
+- `.recursive/scripts/recursive-training-grpo.ps1`
+- `.recursive/scripts/recursive-training-phase8-trigger.py`
+- `.recursive/scripts/recursive-training-phase8-trigger.ps1`
+- `.recursive/scripts/recursive-training-sync.py`
+- `.recursive/scripts/recursive-training-sync.ps1`
+- `.recursive/scripts/recursive-training-loader.py`
+- `.recursive/scripts/recursive-training-loader.ps1`
+- `.recursive/scripts/recursive-training-mcp.py`
+- `.recursive/scripts/recursive-training-mcp.ps1`
 
 ## Subskills
 
@@ -118,6 +128,7 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `skills/recursive-review-bundle/SKILL.md`
 - `skills/recursive-router/SKILL.md`
 - `skills/recursive-subagent/SKILL.md`
+- `skills/recursive-training/SKILL.md` — extract durable experiential knowledge from completed runs
 
 Use those subskills for their specialized discipline, but keep `/.recursive/RECURSIVE.md` as the single source of truth for the overall workflow contract.
 

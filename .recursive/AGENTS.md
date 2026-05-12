@@ -56,6 +56,9 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/skills/recursive-review-bundle/SKILL.md`
 - Working on memory behavior:
   - `/.recursive/memory/MEMORY.md`
+  - `/skills/recursive-training/SKILL.md`
+  - `/.recursive/scripts/recursive-training-loader.py`
+  - `/.recursive/memory/training/`
   - `/.recursive/memory/skills/SKILLS.md`
 
 ## Non-Canonical Bridges

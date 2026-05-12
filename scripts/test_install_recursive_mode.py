@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,27 @@ ROUTER_SPEC.loader.exec_module(router_lib)
 
 
 class InstallRecursiveModeTests(unittest.TestCase):
+    def test_package_surface_includes_recursive_training(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        installable_skills = {path.parent.name for path in (repo_root / "skills").glob("*/SKILL.md")}
+
+        self.assertEqual(
+            {
+                "recursive-benchmark",
+                "recursive-debugging",
+                "recursive-review-bundle",
+                "recursive-router",
+                "recursive-spec",
+                "recursive-subagent",
+                "recursive-tdd",
+                "recursive-training",
+                "recursive-worktree",
+            },
+            installable_skills,
+        )
+        root_skill = (repo_root / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("skills/recursive-training/SKILL.md", root_skill)
+
     def test_bootstrap_workflow_copy_matches_canonical(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         canonical = (repo_root / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
@@ -135,6 +157,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn("/.recursive/config/recursive-router.json", readme)
         self.assertIn("recursive-router", skill)
         self.assertIn("/.recursive/config/recursive-router.json", skill)
+        self.assertIn("recursive-training", readme)
 
     def test_root_readme_workflow_overview_uses_phase_zero_worktree_gate(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
@@ -276,6 +299,105 @@ class InstallRecursiveModeTests(unittest.TestCase):
             gitignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
             self.assertIn("/.recursive/config/recursive-router-discovered.json", gitignore)
 
+    def test_installer_bootstraps_training_memory_and_scripts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-training-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            self.assertTrue((repo_root / ".recursive" / "memory" / "training" / ".gitkeep").exists())
+            self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-loader.py").exists())
+            self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-sync.py").exists())
+            self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-extract.py").exists())
+            self.assertIn(
+                "RECURSIVE-MODE-MEMORY-POINTERS:START",
+                (repo_root / ".cursorrules").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "recursive-mode memory pointers",
+                (repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "recursive-mode memory pointers",
+                (repo_root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8"),
+            )
+
+    def test_installer_upserts_assistant_memory_pointers_without_removing_existing_content(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-pointers-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            github_root = repo_root / ".github"
+            github_root.mkdir(parents=True, exist_ok=True)
+            (repo_root / ".cursorrules").write_text("# Custom cursor notes\n", encoding="utf-8", newline="\n")
+            (repo_root / "CLAUDE.md").write_text("# Team Claude notes\n", encoding="utf-8", newline="\n")
+            (github_root / "copilot-instructions.md").write_text(
+                "# Team Copilot notes\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            self.assertIn("Custom cursor notes", (repo_root / ".cursorrules").read_text(encoding="utf-8"))
+            self.assertIn("Team Claude notes", (repo_root / "CLAUDE.md").read_text(encoding="utf-8"))
+            self.assertIn(
+                "Team Copilot notes",
+                (github_root / "copilot-instructions.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "RECURSIVE-MODE-MEMORY-POINTERS:START",
+                (repo_root / ".cursorrules").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "RECURSIVE-MODE-MEMORY-POINTERS:START",
+                (repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "RECURSIVE-MODE-MEMORY-POINTERS:START",
+                (github_root / "copilot-instructions.md").read_text(encoding="utf-8"),
+            )
+
+    def test_installer_upserts_root_agents_without_removing_existing_content(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-agents-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            agents_path = repo_root / "AGENTS.md"
+            agents_path.write_text("# Team Notes\n\nKeep this custom content.\n", encoding="utf-8", newline="\n")
+
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            updated = agents_path.read_text(encoding="utf-8")
+            self.assertIn("Keep this custom content.", updated)
+            self.assertIn("<!-- RECURSIVE-MODE-AGENTS:START -->", updated)
+
     def test_powershell_installer_migrates_legacy_router_policy(self) -> None:
         powershell = shutil.which("pwsh") or shutil.which("powershell")
         if powershell is None:
@@ -351,6 +473,94 @@ class InstallRecursiveModeTests(unittest.TestCase):
             )
             canonical_policy = json.loads((repo_root / ".recursive" / "config" / "recursive-router.json").read_text(encoding="utf-8"))
             self.assertEqual(router_lib.default_router_policy(), canonical_policy)
+
+    def test_powershell_installer_source_includes_training_scaffold(self) -> None:
+        ps1_script = MODULE_PATH.with_suffix(".ps1").read_text(encoding="utf-8")
+
+        self.assertIn('Join-Path $memoryRoot "training"', ps1_script)
+        self.assertIn("recursive-training-loader.py", ps1_script)
+        self.assertIn("recursive-training-extract.py", ps1_script)
+        self.assertIn('Join-Path $recursiveRoot "scripts"', ps1_script)
+
+    def test_skills_cli_local_install_and_bootstrap_include_training_scaffold(self) -> None:
+        if os.environ.get("RUN_SKILLS_CLI_INTEGRATION") != "1":
+            self.skipTest("Set RUN_SKILLS_CLI_INTEGRATION=1 to enable local Skills CLI integration coverage")
+
+        npx = shutil.which("npx")
+        if npx is None:
+            self.skipTest("npx is required for Skills CLI integration coverage")
+
+        repo_root = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-skills-cli-") as temp_dir:
+            workspace = Path(temp_dir)
+            try:
+                install_completed = subprocess.run(
+                    [
+                        npx,
+                        "skills",
+                        "add",
+                        str(repo_root),
+                        "--skill",
+                        "*",
+                        "--full-depth",
+                    ],
+                    cwd=workspace,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    capture_output=True,
+                    check=False,
+                    timeout=180,
+                )
+            except subprocess.TimeoutExpired as exc:
+                self.skipTest(f"Skills CLI integration timed out: {exc}")
+            combined_output = f"{install_completed.stdout}\n{install_completed.stderr}"
+            if "ENOSPC" in combined_output or "no space left on device" in combined_output.lower():
+                self.skipTest("Insufficient disk space for Skills CLI integration coverage")
+
+            self.assertEqual(
+                install_completed.returncode,
+                0,
+                f"skills add failed\nSTDOUT:\n{install_completed.stdout}\nSTDERR:\n{install_completed.stderr}",
+            )
+
+            installed_root_skill = workspace / ".agents" / "skills" / "recursive-mode"
+            self.assertTrue(
+                installed_root_skill.exists(),
+                f"installed root skill missing\nSTDOUT:\n{install_completed.stdout}\nSTDERR:\n{install_completed.stderr}",
+            )
+            self.assertTrue((installed_root_skill / "skills" / "recursive-training" / "SKILL.md").exists())
+            self.assertTrue((workspace / ".agents" / "skills" / "recursive-training" / "SKILL.md").exists())
+
+            bootstrap_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(installed_root_skill / "scripts" / "install-recursive-mode.py"),
+                    "--repo-root",
+                    str(workspace),
+                ],
+                cwd=workspace,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                bootstrap_completed.returncode,
+                0,
+                f"installed bootstrap failed\nSTDOUT:\n{bootstrap_completed.stdout}\nSTDERR:\n{bootstrap_completed.stderr}",
+            )
+
+            self.assertTrue((workspace / ".recursive" / "memory" / "training" / ".gitkeep").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-loader.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-sync.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-extract.py").exists())
+            self.assertTrue((workspace / ".cursorrules").exists())
+            self.assertTrue((workspace / "CLAUDE.md").exists())
+            self.assertTrue((workspace / ".github" / "copilot-instructions.md").exists())
+
+            installed_recursive = (workspace / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
+            self.assertIn("/.recursive/memory/training/", installed_recursive)
+            self.assertIn("recursive-training-loader.py", installed_recursive)
 
     def test_repo_root_router_policy_is_not_personalized(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent

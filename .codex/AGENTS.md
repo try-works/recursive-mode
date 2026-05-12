@@ -78,6 +78,16 @@ Useful scripts:
 - `scripts/recursive-review-bundle.ps1`
 - `scripts/recursive-subagent-action.py`
 - `scripts/recursive-subagent-action.ps1`
+- `scripts/recursive-training-grpo.py`
+- `scripts/recursive-training-grpo.ps1`
+- `scripts/recursive-training-phase8-trigger.py`
+- `scripts/recursive-training-phase8-trigger.ps1`
+- `scripts/recursive-training-sync.py`
+- `scripts/recursive-training-sync.ps1`
+- `scripts/recursive-training-loader.py`
+- `scripts/recursive-training-loader.ps1`
+- `scripts/recursive-training-mcp.py`
+- `scripts/recursive-training-mcp.ps1`
 - `scripts/recursive-lock.py`
 - `scripts/recursive-lock.ps1`
 - `scripts/verify-locks.py`

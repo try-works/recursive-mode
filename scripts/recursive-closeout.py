@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -415,6 +416,42 @@ def resolve_phase_key(raw_phase: str) -> str:
     return phase_key
 
 
+def artifact_is_locked(artifact_path: Path) -> bool:
+    if not artifact_path.exists():
+        return False
+    content = artifact_path.read_text(encoding="utf-8")
+    return bool(re.search(r"(?m)^Status:\s*`?LOCKED`?\s*$", content)) or "LockedAt:" in content
+
+
+def run_phase8_training_trigger(repo_root: Path, run_id: str) -> int:
+    trigger_script = repo_root / ".recursive" / "scripts" / "recursive-training-phase8-trigger.py"
+    if not trigger_script.exists():
+        print("[INFO] recursive-training Phase 8 trigger not installed; skipping experiential training refresh.")
+        return 0
+
+    command = [
+        sys.executable,
+        str(trigger_script),
+        "--repo-root",
+        str(repo_root),
+        "--run-id",
+        run_id,
+        "--auto",
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip() or "no diagnostics emitted"
+        print(f"[FAIL] recursive-training Phase 8 trigger failed: {details}")
+        return result.returncode or 1
+
+    print("[OK] Ran recursive-training Phase 8 trigger.")
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scaffold recursive-mode closeout artifacts for Phases 4-8.")
     parser.add_argument("--run-id", required=True, help="Run ID under .recursive/run/.")
@@ -456,6 +493,9 @@ def main() -> int:
     lint = load_lint_module()
     file_name = PHASE_CONFIG[phase_key]["file_name"]  # type: ignore[index]
     artifact_path = run_dir / file_name
+    if phase_key == "08" and artifact_path.exists() and not args.force and artifact_is_locked(artifact_path):
+        print(f"[INFO] Phase 8 artifact already locked: {artifact_path}")
+        return run_phase8_training_trigger(repo_root, args.run_id)
     if artifact_path.exists() and not args.force:
         print(f"[INFO] Closeout artifact exists, not overwriting: {artifact_path}")
         return 0

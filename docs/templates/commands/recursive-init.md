@@ -28,6 +28,7 @@ pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-init.ps1" -RepoRoot . -RunI
 5. Creates `addenda/`, `subagents/`, `router-prompts/`, and `evidence/` subfolders
 6. Creates canonical evidence subfolders including `review-bundles/` and `router/`
 7. Marks the run as `recursive-mode-audit-v2`
+8. If `recursive-training` is installed, calls `/.recursive/scripts/recursive-training-loader.py` so the new run starts with memory-index-driven experiential context
 
 ## Output
 

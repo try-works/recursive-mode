@@ -28,6 +28,7 @@ Installable entrypoints:
 - `/skills/recursive-review-bundle/SKILL.md`
 - `/skills/recursive-router/SKILL.md`
 - `/skills/recursive-subagent/SKILL.md`
+- `/skills/recursive-training/SKILL.md`
 
 Optional add-on source:
 
@@ -51,6 +52,7 @@ The installer bootstraps the canonical layout in a target repo:
     patterns/
     incidents/
     episodes/
+    training/
     skills/
       SKILLS.md
       availability/
@@ -61,6 +63,8 @@ The installer bootstraps the canonical layout in a target repo:
         delegated-verification-and-refresh.md
         phase8-skill-memory-promotion.md
     archive/
+  scripts/
+    recursive-training-*.py / *.ps1
   run/
     <run-id>/
 .codex/AGENTS.md
@@ -70,6 +74,8 @@ The installer bootstraps the canonical layout in a target repo:
 
 - `/.recursive/AGENTS.md` is a lightweight internal router/index
 - `/.recursive/RECURSIVE.md` remains the only workflow source of truth
+- `/.recursive/memory/training/` stores extracted experiential learnings from completed runs, indexed through `/.recursive/memory/MEMORY.md`
+- `/.recursive/scripts/` holds the bootstrapped runtime copies of the training scripts used by the installed scaffold
 - `/.recursive/config/recursive-router.json` is the canonical user-editable routed delegation policy; when an agent updates it, use the router configure-and-verify path instead of saving unchecked bindings
 - `/.recursive/config/recursive-router-discovered.json` is generated locally after router probe or verification, should stay gitignored in target repos, and is not part of the bootstrapped scaffold
 - `references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
@@ -129,6 +135,15 @@ Check reusable-repo hygiene:
 python "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.py" --repo-root .
 pwsh -NoProfile -File "<SKILL_DIR>/scripts/check-reusable-repo-hygiene.ps1" -RepoRoot .
 ```
+
+Validate the installed package surface from the current repo checkout:
+
+```bash
+npx skills add "<repo-root>" --skill '*' --full-depth --yes
+python ".agents/skills/recursive-mode/scripts/install-recursive-mode.py" --repo-root .
+```
+
+That path should install the current recursive-mode package, include `recursive-training`, and let the installed bootstrap create the training-aware scaffold (`/.recursive/memory/training/`, `/.recursive/scripts/recursive-training-*`, and the stable memory pointer files).
 
 Run the paired benchmark harness:
 
