@@ -4,9 +4,8 @@ Scope: `How the main agent verifies delegated review or audit work before accept
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/skills/recursive-subagent/SKILL.md`
-- `/agents/code-reviewer.md`
-- `/agents/implementer.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`

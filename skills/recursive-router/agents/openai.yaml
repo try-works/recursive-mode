@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Router"
+  short_description: "External CLI routing for delegated roles"
+  default_prompt: "Use $recursive-router to resolve or execute a routed delegated role without weakening recursive-mode's controller verification rules."

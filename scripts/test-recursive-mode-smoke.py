@@ -334,12 +334,30 @@ class SmokeHarness:
             raise SmokeError("Default recursive-mode bootstrap still hard-wires benchmark skill/file paths into .recursive/AGENTS.md.")
         if "separate optional `recursive-benchmark` add-on" not in recursive_agents:
             raise SmokeError("Default recursive-mode bootstrap did not explain that recursive-benchmark is a separate opt-in add-on in .recursive/AGENTS.md.")
+        for forbidden in (
+            "`/.recursive/README.md`",
+            "`/skills/recursive-spec/SKILL.md`",
+            "`/scripts/install-recursive-mode.py`",
+            "`/references/artifact-template.md`",
+        ):
+            if forbidden in recursive_agents:
+                raise SmokeError(f"Default recursive-mode bootstrap still points .recursive/AGENTS.md at missing source-repo path {forbidden}.")
 
         plans_bridge = (self.repo_root / ".agent" / "PLANS.md").read_text(encoding="utf-8")
         if "separate optional `recursive-benchmark` add-on" not in plans_bridge:
             raise SmokeError("Default recursive-mode bootstrap did not explain that recursive-benchmark is a separate opt-in add-on in .agent/PLANS.md.")
         if "should use the packaged benchmark fixture" in plans_bridge:
             raise SmokeError("Default recursive-mode bootstrap still assumes benchmark fixtures are present in .agent/PLANS.md.")
+
+        codex_agents = (self.repo_root / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
+        for forbidden in (
+            "`scripts/install-recursive-mode.py`",
+            "`scripts/recursive-status.py`",
+            "`scripts/lint-recursive-run.py`",
+            "`scripts/verify-locks.py`",
+        ):
+            if forbidden in codex_agents:
+                raise SmokeError(f"Default recursive-mode bootstrap still points .codex/AGENTS.md at missing source-repo helper path {forbidden}.")
 
         router_policy_path = self.repo_root / ".recursive" / "config" / "recursive-router.json"
         router_discovery_path = self.repo_root / ".recursive" / "config" / "recursive-router-discovered.json"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive Training"
+  short_description: "Cross-run experiential memory extraction"
+  default_prompt: "Use $recursive-training to extract durable experiential memory from completed recursive-mode runs and refresh the canonical memory plane."

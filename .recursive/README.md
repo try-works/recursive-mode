@@ -30,9 +30,9 @@ Installable entrypoints:
 - `/skills/recursive-subagent/SKILL.md`
 - `/skills/recursive-training/SKILL.md`
 
-Optional add-on source:
+Optional add-on source doc:
 
-- `/skills/recursive-benchmark/SKILL.md`
+- `/references/benchmark-addon/recursive-benchmark/BENCHMARK-ADDON.md`
 
 ## Bootstrap Layout
 
@@ -143,7 +143,7 @@ npx skills add "<repo-root>" --skill '*' --full-depth --yes
 python ".agents/skills/recursive-mode/scripts/install-recursive-mode.py" --repo-root .
 ```
 
-That path should install the current recursive-mode package, include `recursive-training`, and let the installed bootstrap create the training-aware scaffold (`/.recursive/memory/training/`, `/.recursive/scripts/recursive-training-*`, and the stable memory pointer files).
+That path should install the current recursive-mode package, include `recursive-training`, exclude `recursive-benchmark`, and let the installed bootstrap create the training-aware scaffold (`/.recursive/memory/training/`, `/.recursive/scripts/recursive-training-*`, and the stable memory pointer files).
 
 Run the paired benchmark harness:
 

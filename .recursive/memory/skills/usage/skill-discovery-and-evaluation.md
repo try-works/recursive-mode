@@ -4,8 +4,8 @@ Scope: `How recursive-mode runs should discover, evaluate, and record external s
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/SKILL.md`
-- `/README.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`

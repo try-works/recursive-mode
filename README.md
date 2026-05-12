@@ -24,9 +24,9 @@ This repo currently ships these default installable skills:
 - `recursive-subagent`
 - `recursive-training`
 
-Optional add-on source:
+Optional add-on:
 
-- `recursive-benchmark`
+- `recursive-benchmark` (kept outside the default package surface; this repo keeps the maintainer source doc at `references/benchmark-addon/recursive-benchmark/BENCHMARK-ADDON.md`)
 
 ## Included Subskills
 
@@ -206,7 +206,7 @@ After installing the skill package into your agent environment, the intended nor
 
 `recursive-spec` is intentionally approval-gated: it should collaborate on the draft first, keep that draft in temporary/session storage, and only create `/.recursive/run/<run-id>/00-requirements.md` after the user approves the spec.
 
-If you want to measure recursive-mode itself, install `recursive-benchmark` on demand from its dedicated add-on package or repo source and then use it to create paired `recursive-off` and `recursive-on` benchmark repos from the packaged benchmark fixture and generate a markdown comparison report with logs, scores, and screenshot artifacts when present.
+If you want to measure recursive-mode itself, install `recursive-benchmark` on demand from its dedicated add-on package or repo source. This repository still carries the maintainer harness and fixture sources for that add-on, but `npx skills add try-works/recursive-mode --skill '*' --full-depth` should not expose it as part of the default recursive-mode package.
 
 Manual bootstrap commands remain the fallback path when the runtime cannot auto-run the installer:
 
@@ -241,6 +241,8 @@ The installable root skill entrypoint is:
 - `/SKILL.md`
 
 ## Benchmarking recursive-mode
+
+The benchmark add-on stays separate from the default recursive-mode package. This repository still carries the harness and fixture sources used to maintain that add-on, but the default `try-works/recursive-mode` install should not surface `recursive-benchmark` as a full-depth subskill.
 
 The packaged benchmark flow is meant to answer a simple question: **does recursive-mode improve real coding-agent outcomes on the same project?**
 

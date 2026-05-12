@@ -153,7 +153,7 @@ Before dispatching from an isolated worktree, make sure the routing policy and d
 
 ## Optional add-on
 
-- `recursive-benchmark` is intentionally excluded from the default exported recursive-mode package because it carries large packaged benchmark fixtures.
+- `recursive-benchmark` stays outside the default recursive-mode package surface.
 - Install it only when a user explicitly asks to benchmark recursive-mode, preferably via `find-skills` or by adding its dedicated benchmark add-on package or repo source.
 
 For audited phases, the installed workflow requires `draft -> audit -> repair -> re-audit -> pass -> lock`, with `Audit: PASS` required before Coverage/Approval may pass.

@@ -4,10 +4,9 @@ Scope: `How Phase 8 captures run-local skill usage and promotes only durable les
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/references/artifact-template.md`
-- `/scripts/recursive-closeout.py`
-- `/scripts/lint-recursive-run.py`
-- `/scripts/recursive-status.py`
+- `/.recursive/memory/MEMORY.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`

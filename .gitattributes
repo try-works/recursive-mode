@@ -5,7 +5,7 @@ skills/*/SKILL.md text eol=lf
 skills/**/SKILL.md text eol=lf
 
 # Exclude the heavy benchmark add-on from default exported recursive-mode package archives.
-skills/recursive-benchmark export-ignore
+references/benchmark-addon export-ignore
 references/benchmarks export-ignore
 scripts/run-recursive-benchmark.py export-ignore
 scripts/run-recursive-benchmark.ps1 export-ignore

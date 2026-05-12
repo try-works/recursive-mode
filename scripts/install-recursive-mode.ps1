@@ -439,8 +439,8 @@ Scope: `How recursive-mode runs should discover, evaluate, and record external s
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/SKILL.md`
-- `/README.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`
@@ -495,9 +495,8 @@ Scope: `How the main agent verifies delegated review or audit work before accept
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/skills/recursive-subagent/SKILL.md`
-- `/agents/code-reviewer.md`
-- `/agents/implementer.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`
@@ -550,10 +549,9 @@ Scope: `How Phase 8 captures run-local skill usage and promotes only durable les
 Owns-Paths:
 Watch-Paths:
 - `/.recursive/RECURSIVE.md`
-- `/references/artifact-template.md`
-- `/scripts/recursive-closeout.py`
-- `/scripts/lint-recursive-run.py`
-- `/scripts/recursive-status.py`
+- `/.recursive/memory/MEMORY.md`
+- `/.recursive/memory/skills/SKILLS.md`
+- `/.recursive/run/`
 Source-Runs:
 - `none (generic repository guidance)`
 Validated-At-Commit: `generic-repository-guidance`
@@ -615,7 +613,7 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
 3. Read `/.recursive/DECISIONS.md` when prior rationale or relevant earlier work matters.
 4. Read `/.recursive/memory/MEMORY.md` when task context may depend on durable memory.
 5. Read `/.recursive/memory/skills/SKILLS.md` when the task may use delegated review, subagents, review bundles, smoke-harness portability work, or other capability-sensitive execution.
-6. Read `/.recursive/README.md` for repo-maintainer/bootstrap notes when changing the package itself.
+6. Read the recursive-mode package README or maintainer notes from the installed skill directory or source package checkout when changing the package itself.
 
 ## Task Routing
 
@@ -628,7 +626,7 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - `/.recursive/STATE.md`
   - `/.recursive/DECISIONS.md`
   - `/.recursive/memory/MEMORY.md`
-  - `/skills/recursive-spec/SKILL.md`
+  - the installed `recursive-spec` skill
   - relevant code and tests for the requested area
 - Benchmarking recursive-mode against a non-recursive baseline:
   - Install the separate optional `recursive-benchmark` add-on only when the user explicitly asks for benchmarking.
@@ -636,24 +634,19 @@ It exists to reduce blind doc-by-doc scanning. It is not a second workflow spec.
   - The default exported `recursive-mode` package intentionally excludes benchmark fixtures and benchmark skill files.
   - After the benchmark add-on is installed, follow its packaged fixture and harness docs.
 - Working on reusable package/bootstrap/docs for this repo:
-  - `/.recursive/README.md`
-  - `/README.md`
-  - `/scripts/install-recursive-mode.py`
-  - `/scripts/install-recursive-mode.ps1`
+  - the recursive-mode package README or maintainer notes from the installed skill directory or source package checkout
+  - the recursive-mode installer scripts from the installed skill directory or source package checkout
 - Working on phase artifact structure or lint expectations:
-  - `/references/artifact-template.md`
-  - `/scripts/lint-recursive-run.py`
-  - `/scripts/recursive-status.py`
+  - the recursive-mode artifact template from the installed skill directory or source package checkout
+  - the recursive-mode lint/status helpers from the installed skill directory or source package checkout
 - Working on delegated review, subagent behavior, or routed CLI delegation:
   - `/.recursive/memory/skills/SKILLS.md`
   - `/.recursive/config/recursive-router.json`
   - `/.recursive/config/recursive-router-discovered.json`
-  - `/skills/recursive-router/SKILL.md`
-  - `/skills/recursive-subagent/SKILL.md`
-  - `/skills/recursive-review-bundle/SKILL.md`
+  - the installed `recursive-router`, `recursive-subagent`, and `recursive-review-bundle` skills
 - Working on memory behavior:
   - `/.recursive/memory/MEMORY.md`
-  - `/skills/recursive-training/SKILL.md`
+  - the installed `recursive-training` skill
   - `/.recursive/scripts/recursive-training-loader.py`
   - `/.recursive/memory/training/`
   - `/.recursive/memory/skills/SKILLS.md`
@@ -714,7 +707,7 @@ Audit delegation rule:
 
 Router rule:
 
-- If the user asks to route delegated work through another transport/model, configure or inspect `/.recursive/config/recursive-router.json`, refresh `/.recursive/config/recursive-router-discovered.json`, and use `recursive-router` before dispatching the delegated role.
+- If the user asks to route delegated work through another transport/model, configure or inspect `/.recursive/config/recursive-router.json`, refresh `/.recursive/config/recursive-router-discovered.json`, re-read both immediately before choosing the delegated CLI/model, and use `recursive-router` before dispatching the delegated role.
 '@
 }
 

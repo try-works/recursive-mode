@@ -1,9 +1,8 @@
----
-name: recursive-benchmark
-description: 'Paired benchmark orchestration for comparing coding-agent performance with recursive-mode off and on. Use when the user wants to benchmark recursive-mode, compare recursive vs non-recursive execution on the same project, generate disposable benchmark repos, capture timing/build-test logs, or write a benchmark report.'
----
+# recursive-benchmark add-on source
 
-# recursive-benchmark
+This is a maintainer-facing source doc for the separate `recursive-benchmark` add-on.
+
+It intentionally is **not** an installable skill entrypoint inside the default `recursive-mode` package.
 
 Use this skill to run a fair benchmark that compares the same coding agent with **recursive-mode off** and **recursive-mode on**.
 
