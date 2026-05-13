@@ -177,6 +177,7 @@ If the run needs a specialized capability that is not already available, prefer 
 Diff audit ignores incidental runtime byproducts such as `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, and `.ruff_cache/` unless the repo intentionally tracks them.
 Treat Phase 6, Phase 7, and Phase 8 receipts as concise delta receipts that point to the final control-plane docs instead of restating large sections.
 Use `scripts/recursive-lock.py` or `scripts/recursive-lock.ps1` as the normal locking path instead of manually editing `Status`, `LockedAt`, and `LockHash`.
+`recursive-lock` enforces monotonic phase gating: it will reject a lock attempt if any earlier phase that exists in the run directory is not already LOCKED. To reopen a locked artifact and reset it to DRAFT (which also invalidates downstream receipts), use the `--reopen` flag.
 On Windows, run Node/Vite/Vitest commands from the real worktree path rather than `subst` or mapped-drive aliases.
 When evaluating or building browser-local apps, consult `references/local-first-web-app-checklist.md` for common import/persistence/QA edge cases.
 If the repository being improved is itself a reusable skill/workflow repo, do not commit current-session run folders, evidence logs, review bundles, subagent action records, or temp-path references unless they are intentional fixtures; use `scripts/check-reusable-repo-hygiene.py` or `scripts/check-reusable-repo-hygiene.ps1` before calling the repo clean.

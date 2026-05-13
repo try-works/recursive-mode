@@ -94,4 +94,6 @@ Diff ownership rules:
 Locking rule:
 
 - Use `recursive-lock` as the primary supported way to write `Status: LOCKED`, `LockedAt`, and `LockHash`.
+- `recursive-lock` enforces monotonic phase gating: all earlier phases that exist in the run directory must be LOCKED before the target phase can be locked.
+- To reopen a locked artifact (reset to DRAFT and invalidate downstream receipts), pass `--reopen` to `recursive-lock`.
 <!-- RECURSIVE-MODE-AGENTS:END -->
