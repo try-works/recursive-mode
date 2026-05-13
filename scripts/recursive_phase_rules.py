@@ -230,6 +230,9 @@ def write_receipt(
       - hash of the previous receipt (for chaining)
       - self-hash of the receipt JSON
 
+    Raises RuntimeError if any prerequisite is not LOCKED at the time of
+    writing, ensuring the receipt chain is internally consistent.
+
     Returns the written receipt dict.
     """
     content = artifact_path.read_text(encoding="utf-8")
@@ -239,6 +242,12 @@ def write_receipt(
     for prereq in get_prerequisites(artifact_file, run_dir):
         prereq_path = run_dir / prereq
         if prereq_path.exists():
+            prereq_status = get_lock_status(prereq_path)
+            if prereq_status != "LOCKED":
+                raise RuntimeError(
+                    f"Cannot write receipt for {artifact_file!r}: "
+                    f"prerequisite {prereq!r} is not LOCKED (status: {prereq_status})"
+                )
             prereq_content = prereq_path.read_text(encoding="utf-8")
             prereq_hashes[prereq] = lock_hash_from_content(prereq_content)
 

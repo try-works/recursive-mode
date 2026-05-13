@@ -299,6 +299,35 @@ class TestReceiptIO(unittest.TestCase):
         self.assertTrue(removed)
         self.assertIsNone(rules.read_receipt(self.run_dir, "00-requirements.md"))
 
+    def test_write_receipt_rejects_unlocked_prerequisite(self):
+        """write_receipt must raise if a prerequisite exists but is not LOCKED."""
+        req_path = self.run_dir / "00-requirements.md"
+        wt_path = self.run_dir / "00-worktree.md"
+        # Write requirements as DRAFT (not locked)
+        _write(req_path, _draft_content("00-requirements.md"))
+        # Write worktree as LOCKED
+        _write(wt_path, _locked_content("00-worktree.md"))
+        with self.assertRaises(RuntimeError) as ctx:
+            rules.write_receipt(self.run_dir, "00-worktree.md", wt_path)
+        self.assertIn("00-requirements.md", str(ctx.exception))
+        self.assertIn("DRAFT", str(ctx.exception))
+
+    def test_write_receipt_allows_absent_optional_prerequisites(self):
+        """write_receipt must not raise for optional phases that don't exist."""
+        req_path = self.run_dir / "00-requirements.md"
+        wt_path = self.run_dir / "00-worktree.md"
+        _write(req_path, _locked_content("00-requirements.md"))
+        rules.write_receipt(self.run_dir, "00-requirements.md", req_path)
+        _write(wt_path, _locked_content("00-worktree.md"))
+        # 01-as-is is optional and absent → should not block 02-to-be-plan receipt
+        # First write worktree receipt
+        rules.write_receipt(self.run_dir, "00-worktree.md", wt_path)
+        plan_path = self.run_dir / "02-to-be-plan.md"
+        _write(plan_path, _locked_content("02-to-be-plan.md"))
+        # Should succeed since 01-as-is (optional) is absent — not a prereq
+        receipt = rules.write_receipt(self.run_dir, "02-to-be-plan.md", plan_path)
+        self.assertNotIn("01-as-is.md", receipt["prerequisite_hashes"])
+
     def test_invalidate_nonexistent_returns_false(self):
         self.assertFalse(rules.invalidate_receipt(self.run_dir, "00-requirements.md"))
 
