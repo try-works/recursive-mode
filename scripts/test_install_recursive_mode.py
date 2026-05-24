@@ -52,8 +52,13 @@ class InstallRecursiveModeTests(unittest.TestCase):
 
     def test_bootstrap_workflow_copy_matches_canonical(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
-        canonical = (repo_root / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
-        bootstrap = (repo_root / "references" / "bootstrap" / "RECURSIVE.md").read_text(encoding="utf-8")
+        start = "<!-- RECURSIVE-MODE-CANONICAL:START -->"
+        end = "<!-- RECURSIVE-MODE-CANONICAL:END -->"
+        canonical_raw = (repo_root / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
+        bootstrap_raw = (repo_root / "references" / "bootstrap" / "RECURSIVE.md").read_text(encoding="utf-8")
+
+        canonical = install.normalize_plain_or_wrapped_content(canonical_raw, start, end)
+        bootstrap = install.normalize_plain_or_wrapped_content(bootstrap_raw, start, end)
 
         self.assertEqual(canonical, bootstrap)
 
@@ -455,6 +460,105 @@ class InstallRecursiveModeTests(unittest.TestCase):
             updated = agents_path.read_text(encoding="utf-8")
             self.assertIn("Keep this custom content.", updated)
             self.assertIn("<!-- RECURSIVE-MODE-AGENTS:START -->", updated)
+
+    def test_installer_upserts_recursive_md_without_replacing_existing_content(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-recursive-upsert-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            recursive_root = repo_root / ".recursive"
+            recursive_root.mkdir(parents=True, exist_ok=True)
+            recursive_path = recursive_root / "RECURSIVE.md"
+            custom_header = "# My Repo\n\nCustom notes above the workflow.\n"
+            recursive_path.write_text(custom_header, encoding="utf-8", newline="\n")
+
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            updated = recursive_path.read_text(encoding="utf-8")
+            self.assertIn("Custom notes above the workflow.", updated)
+            self.assertIn("<!-- RECURSIVE-MODE-CANONICAL:START -->", updated)
+            self.assertIn("<!-- RECURSIVE-MODE-CANONICAL:END -->", updated)
+
+    def test_installer_migrates_plain_recursive_md_to_marked_version(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-recursive-migrate-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+
+            # First install: creates a marked RECURSIVE.md
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"first install failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            recursive_path = repo_root / ".recursive" / "RECURSIVE.md"
+            first_content = recursive_path.read_text(encoding="utf-8")
+            self.assertIn("<!-- RECURSIVE-MODE-CANONICAL:START -->", first_content)
+
+            # Re-install: must be idempotent — no content duplication
+            completed2 = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                completed2.returncode,
+                0,
+                f"re-install failed\nSTDOUT:\n{completed2.stdout}\nSTDERR:\n{completed2.stderr}",
+            )
+            second_content = recursive_path.read_text(encoding="utf-8")
+            self.assertEqual(first_content, second_content, "Re-install must not alter RECURSIVE.md content")
+            # Canonical block must appear exactly once
+            self.assertEqual(1, second_content.count("<!-- RECURSIVE-MODE-CANONICAL:START -->"))
+
+    def test_installer_migrates_legacy_plain_recursive_md_without_duplication(self) -> None:
+        """Simulates upgrading a repo that was bootstrapped with the old sync_plain_file installer."""
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-recursive-legacy-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            recursive_root = repo_root / ".recursive"
+            recursive_root.mkdir(parents=True, exist_ok=True)
+            recursive_path = recursive_root / "RECURSIVE.md"
+
+            # Simulate the old installer: write the canonical body as plain content (no markers)
+            skill_root = Path(MODULE_PATH).resolve().parent.parent
+            canonical_source = install.resolve_canonical_workflow_path(skill_root)
+            canonical_body = install.normalize_plain_or_wrapped_content(
+                canonical_source.read_text(encoding="utf-8"),
+                "<!-- RECURSIVE-MODE-CANONICAL:START -->",
+                "<!-- RECURSIVE-MODE-CANONICAL:END -->",
+            )
+            recursive_path.write_text(canonical_body + "\n", encoding="utf-8", newline="\n")
+            self.assertNotIn("<!-- RECURSIVE-MODE-CANONICAL:START -->", recursive_path.read_text(encoding="utf-8"))
+
+            # Run updated installer — should migrate to marked version, not duplicate content
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            updated = recursive_path.read_text(encoding="utf-8")
+            self.assertIn("<!-- RECURSIVE-MODE-CANONICAL:START -->", updated)
+            self.assertEqual(1, updated.count("<!-- RECURSIVE-MODE-CANONICAL:START -->"),
+                             "Canonical block must not be duplicated on legacy migration")
 
     def test_powershell_installer_migrates_legacy_router_policy(self) -> None:
         powershell = shutil.which("pwsh") or shutil.which("powershell")

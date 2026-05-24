@@ -192,6 +192,47 @@ function Sync-PlainFile {
   }
 }
 
+function Upsert-OrMigrateCanonical {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string]$StartMarker,
+    [Parameter(Mandatory = $true)][string]$EndMarker,
+    [Parameter(Mandatory = $true)][string]$BlockBody
+  )
+
+  $existing = ""
+  if (Test-Path -LiteralPath $FilePath) {
+    $existing = Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
+    if ($null -eq $existing) { $existing = "" }
+  }
+
+  $block = "$StartMarker`r`n$BlockBody`r`n$EndMarker"
+  $pattern = "(?s)$([regex]::Escape($StartMarker)).*?$([regex]::Escape($EndMarker))"
+
+  if ([regex]::IsMatch($existing, $pattern)) {
+    $updated = [regex]::Replace(
+      $existing,
+      $pattern,
+      [System.Text.RegularExpressions.MatchEvaluator] { param($m) $block }
+    )
+  } elseif ([string]::IsNullOrWhiteSpace($existing)) {
+    $updated = "$block`r`n"
+  } elseif ($existing.TrimEnd("`r", "`n") -eq $BlockBody.TrimEnd("`r", "`n")) {
+    # Plain-installed canonical content — wrap in markers without duplication.
+    $updated = "$block`r`n"
+  } else {
+    $trimmed = $existing.TrimEnd("`r", "`n")
+    $updated = "$trimmed`r`n`r`n$block`r`n"
+  }
+
+  if ($updated -ne $existing) {
+    Write-Utf8NoBom -Path $FilePath -Content $updated
+    Write-Output "[OK] Updated file: $FilePath"
+  } else {
+    Write-Output "[OK] File already up to date: $FilePath"
+  }
+}
+
 function Get-RecursiveRouterPolicyJson {
   @'
 {
@@ -908,7 +949,11 @@ if (-not $SkipRecursiveUpdate) {
     -Content (Get-Content -LiteralPath $canonicalWorkflowPath -Raw -Encoding UTF8) `
     -StartMarker $recursiveStartMarker `
     -EndMarker $recursiveEndMarker
-  Sync-PlainFile -Path $recursivePath -Content $canonicalBody
+  Upsert-OrMigrateCanonical `
+    -FilePath $recursivePath `
+    -StartMarker $recursiveStartMarker `
+    -EndMarker $recursiveEndMarker `
+    -BlockBody $canonicalBody.TrimEnd("`r", "`n")
 } else {
   Write-Output "[INFO] Skipped RECURSIVE.md update by configuration."
 }

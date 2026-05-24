@@ -126,6 +126,39 @@ def sync_plain_file(file_path: Path, content: str) -> None:
         print(f"[OK] File already up to date: {file_path}")
 
 
+def upsert_or_migrate_canonical(
+    file_path: Path,
+    start_marker: str,
+    end_marker: str,
+    canonical_body: str,
+) -> None:
+    """Upsert the canonical block in file_path, preserving any surrounding content.
+
+    Migration: if the file exists without markers and its normalized content
+    equals the canonical body (written by a prior plain-file install), replace
+    it with the marked version to avoid duplicate content on the first upgrade.
+    """
+    existing = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
+    block = f"{start_marker}\n{canonical_body.rstrip()}\n{end_marker}"
+    pattern = re.compile(rf"{re.escape(start_marker)}.*?{re.escape(end_marker)}", re.DOTALL)
+
+    if pattern.search(existing):
+        updated = pattern.sub(lambda _match: block, existing)
+    elif not existing.strip():
+        updated = f"{block}\n"
+    elif existing.rstrip("\r\n") == canonical_body.rstrip("\r\n"):
+        # Plain-installed canonical content — wrap in markers without duplication.
+        updated = f"{block}\n"
+    else:
+        updated = f"{existing.rstrip()}\n\n{block}\n"
+
+    if updated != existing:
+        write_utf8_no_bom(file_path, updated)
+        print(f"[OK] Updated file: {file_path}")
+    else:
+        print(f"[OK] File already up to date: {file_path}")
+
+
 def memory_router_body() -> str:
     return """## Memory Router
 
@@ -705,7 +738,12 @@ def main() -> None:
             recursive_start_marker,
             recursive_end_marker,
         )
-        sync_plain_file(recursive_path, canonical_body)
+        upsert_or_migrate_canonical(
+            recursive_path,
+            recursive_start_marker,
+            recursive_end_marker,
+            canonical_body,
+        )
     else:
         print("[INFO] Skipped RECURSIVE.md update by configuration.")
 
