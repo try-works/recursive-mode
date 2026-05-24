@@ -198,6 +198,39 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn("/.recursive/config/recursive-router.json", skill)
         self.assertIn("recursive-training", readme)
 
+    def test_helper_inventories_include_closeout_and_training_extract(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        skill = (repo_root / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("scripts/recursive-closeout.py", skill)
+        self.assertIn("scripts/recursive-closeout.ps1", skill)
+        self.assertIn(".recursive/scripts/recursive-training-extract.py", skill)
+        self.assertIn(".recursive/scripts/recursive-training-extract.ps1", skill)
+
+        for relative_path in (Path("AGENTS.md"), Path(".codex/AGENTS.md"), Path("references/agents-block.md")):
+            content = (repo_root / relative_path).read_text(encoding="utf-8")
+            with self.subTest(path=str(relative_path), snippet="recursive-closeout"):
+                self.assertIn("`recursive-closeout`", content)
+            with self.subTest(path=str(relative_path), snippet="recursive-training-extract"):
+                self.assertIn("`recursive-training-extract`", content)
+
+    def test_readmes_publish_canonical_regression_command_and_closeout_helper(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        regression_command = (
+            "python -m unittest scripts.test_install_recursive_mode scripts.test_lint_recursive_run "
+            "scripts.test_recursive_phase_rules scripts.test_recursive_review_bundle "
+            "scripts.test_recursive_router scripts.test_recursive_subagent_action "
+            "scripts.test_recursive_training scripts.test_run_recursive_benchmark"
+        )
+
+        root_readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        self.assertIn(regression_command, root_readme)
+        self.assertIn("python scripts/test-recursive-mode-smoke.py", root_readme)
+
+        maintainer_readme = (repo_root / ".recursive" / "README.md").read_text(encoding="utf-8")
+        self.assertIn(regression_command, maintainer_readme)
+        self.assertIn('python "<SKILL_DIR>/scripts/recursive-closeout.py" --repo-root . --run-id "<run-id>" --phase 04', maintainer_readme)
+        self.assertIn('pwsh -NoProfile -File "<SKILL_DIR>/scripts/recursive-closeout.ps1" -RepoRoot . -RunId "<run-id>" -Phase 04', maintainer_readme)
+
     def test_root_readme_workflow_overview_uses_phase_zero_worktree_gate(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         readme = (repo_root / "README.md").read_text(encoding="utf-8")
@@ -287,6 +320,8 @@ class InstallRecursiveModeTests(unittest.TestCase):
 
         self.assertIn("Invoke these helper names", content)
         self.assertIn("`install-recursive-mode`", content)
+        self.assertIn("`recursive-closeout`", content)
+        self.assertIn("`recursive-training-extract`", content)
         self.assertNotIn("`scripts/install-recursive-mode.py`", content)
         self.assertNotIn("`scripts/recursive-status.py`", content)
 

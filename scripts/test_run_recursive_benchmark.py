@@ -24,6 +24,19 @@ sys.modules[SPEC.name] = rrb
 SPEC.loader.exec_module(rrb)
 
 
+class RecursiveBenchmarkRepoSurfaceTests(unittest.TestCase):
+    def test_repo_uses_single_authoritative_benchmark_fixture_tree(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        duplicate_root = repo_root / "references" / "benchmarks" / "benchmarks"
+        duplicate_files = sorted(
+            path.relative_to(repo_root).as_posix()
+            for path in duplicate_root.rglob("*")
+            if path.is_file()
+        )
+
+        self.assertEqual([], duplicate_files)
+
+
 class RecursiveBenchmarkIntegrityTests(unittest.TestCase):
     def setUp(self) -> None:
         if shutil.which("git") is None:
@@ -3329,68 +3342,57 @@ class RecursiveBenchmarkIntegrityTests(unittest.TestCase):
         self.assertIn("#### Judge-adjusted score breakdown", report)
 
     def test_packaged_node_vite_starters_match_scenario_titles(self) -> None:
-        benchmark_roots = (
-            self.harness.repo_source_root / "references" / "benchmarks",
-            self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks",
-        )
+        benchmark_root = self.harness.repo_source_root / "references" / "benchmarks"
         node_vite_scenarios = {
             "local-first-planner": "Local First Planner",
             "team-capacity-board": "Team Capacity Board",
             "release-readiness-dashboard": "Release Readiness Dashboard",
         }
 
-        for benchmark_root in benchmark_roots:
-            for scenario_slug, scenario_title in node_vite_scenarios.items():
-                starter_root = benchmark_root / scenario_slug / "starter"
-                root_label = str(starter_root.relative_to(self.harness.repo_source_root))
+        for scenario_slug, scenario_title in node_vite_scenarios.items():
+            starter_root = benchmark_root / scenario_slug / "starter"
+            root_label = str(starter_root.relative_to(self.harness.repo_source_root))
 
-                with self.subTest(root=root_label, file="README.md"):
-                    first_line = (starter_root / "README.md").read_text(encoding="utf-8").splitlines()[0]
-                    self.assertEqual(f"# {scenario_title} benchmark starter", first_line)
+            with self.subTest(root=root_label, file="README.md"):
+                first_line = (starter_root / "README.md").read_text(encoding="utf-8").splitlines()[0]
+                self.assertEqual(f"# {scenario_title} benchmark starter", first_line)
 
-                with self.subTest(root=root_label, file="index.html"):
-                    index_html = (starter_root / "index.html").read_text(encoding="utf-8")
-                    self.assertIn(f"<title>{scenario_title} Benchmark</title>", index_html)
+            with self.subTest(root=root_label, file="index.html"):
+                index_html = (starter_root / "index.html").read_text(encoding="utf-8")
+                self.assertIn(f"<title>{scenario_title} Benchmark</title>", index_html)
 
-                with self.subTest(root=root_label, file="src/App.tsx"):
-                    app_source = (starter_root / "src" / "App.tsx").read_text(encoding="utf-8")
-                    self.assertIn(f"<h1>{scenario_title}</h1>", app_source)
+            with self.subTest(root=root_label, file="src/App.tsx"):
+                app_source = (starter_root / "src" / "App.tsx").read_text(encoding="utf-8")
+                self.assertIn(f"<h1>{scenario_title}</h1>", app_source)
 
-                with self.subTest(root=root_label, file="src/App.test.tsx"):
-                    test_source = (starter_root / "src" / "App.test.tsx").read_text(encoding="utf-8")
-                    self.assertIn(f'name: "{scenario_title}"', test_source)
+            with self.subTest(root=root_label, file="src/App.test.tsx"):
+                test_source = (starter_root / "src" / "App.test.tsx").read_text(encoding="utf-8")
+                self.assertIn(f'name: "{scenario_title}"', test_source)
 
     def test_packaged_recursive_on_prompts_preserve_required_todo_heading(self) -> None:
-        benchmark_roots = (
-            self.harness.repo_source_root / "references" / "benchmarks",
-            self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks",
-        )
+        benchmark_root = self.harness.repo_source_root / "references" / "benchmarks"
 
-        for benchmark_root in benchmark_roots:
-            for prompt_path in sorted(benchmark_root.glob("*/prompt-recursive-on.md")):
-                prompt_text = prompt_path.read_text(encoding="utf-8")
+        for prompt_path in sorted(benchmark_root.glob("*/prompt-recursive-on.md")):
+            prompt_text = prompt_path.read_text(encoding="utf-8")
 
-                with self.subTest(prompt=str(prompt_path.relative_to(self.harness.repo_source_root))):
-                    self.assertIn("Keep the required `## TODO` heading", prompt_text)
-                    self.assertNotIn("remove the template `## TODO` section entirely", prompt_text)
-                    self.assertIn("benchmark/recursive-skills/", prompt_text)
-                    self.assertIn("benchmark/recursive-templates/", prompt_text)
-                    self.assertIn(".recursive/config/recursive-router.json", prompt_text)
-                    self.assertIn(".recursive/config/recursive-router-discovered.json", prompt_text)
-                    self.assertIn("follow that routed policy instead of inventing or hardcoding a CLI/model", prompt_text)
-                    self.assertIn("Do not start Phase 2 until `01-as-is.md` is lint-valid and locked", prompt_text)
-                    self.assertIn("run strict recursive lint for run `{{RUN_ID}}`", prompt_text)
-                    self.assertIn("If planner is routed, make a bounded planner call during Phase 2 before locking `02-to-be-plan.md`", prompt_text)
-                    self.assertIn("Do not defer all routed delegation until the end merely to save time", prompt_text)
-                    self.assertIn("Timeout or latency by itself is not a valid override reason for skipping a configured routed stage", prompt_text)
-                    self.assertIn("`python scripts/recursive-router-invoke.py`", prompt_text)
-                    self.assertIn("`python scripts/recursive-subagent-action.py`", prompt_text)
+            with self.subTest(prompt=str(prompt_path.relative_to(self.harness.repo_source_root))):
+                self.assertIn("Keep the required `## TODO` heading", prompt_text)
+                self.assertNotIn("remove the template `## TODO` section entirely", prompt_text)
+                self.assertIn("benchmark/recursive-skills/", prompt_text)
+                self.assertIn("benchmark/recursive-templates/", prompt_text)
+                self.assertIn(".recursive/config/recursive-router.json", prompt_text)
+                self.assertIn(".recursive/config/recursive-router-discovered.json", prompt_text)
+                self.assertIn("follow that routed policy instead of inventing or hardcoding a CLI/model", prompt_text)
+                self.assertIn("Do not start Phase 2 until `01-as-is.md` is lint-valid and locked", prompt_text)
+                self.assertIn("run strict recursive lint for run `{{RUN_ID}}`", prompt_text)
+                self.assertIn("If planner is routed, make a bounded planner call during Phase 2 before locking `02-to-be-plan.md`", prompt_text)
+                self.assertIn("Do not defer all routed delegation until the end merely to save time", prompt_text)
+                self.assertIn("Timeout or latency by itself is not a valid override reason for skipping a configured routed stage", prompt_text)
+                self.assertIn("`python scripts/recursive-router-invoke.py`", prompt_text)
+                self.assertIn("`python scripts/recursive-subagent-action.py`", prompt_text)
 
     def test_packaged_recursive_on_prompts_include_stricter_worktree_and_closeout_rules(self) -> None:
-        benchmark_roots = (
-            self.harness.repo_source_root / "references" / "benchmarks",
-            self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks",
-        )
+        benchmark_root = self.harness.repo_source_root / "references" / "benchmarks"
         required_snippets = (
             "The expected implementation root for this run is `{{EXPECTED_PRODUCT_ROOT}}` relative to the repository root.",
             "Treat `{{EXPECTED_PRODUCT_ROOT}}` as the product root for all product edits, builds, tests, previews, and screenshots unless the control-plane docs force a different path.",
@@ -3399,56 +3401,29 @@ class RecursiveBenchmarkIntegrityTests(unittest.TestCase):
             "Use pragmatic recursive defaults unless the control-plane docs require something stricter:",
         )
 
-        for benchmark_root in benchmark_roots:
-            for prompt_path in sorted(benchmark_root.glob("*/prompt-recursive-on.md")):
-                prompt_text = prompt_path.read_text(encoding="utf-8")
+        for prompt_path in sorted(benchmark_root.glob("*/prompt-recursive-on.md")):
+            prompt_text = prompt_path.read_text(encoding="utf-8")
 
-                with self.subTest(prompt=str(prompt_path.relative_to(self.harness.repo_source_root))):
-                    for snippet in required_snippets:
-                        self.assertIn(snippet, prompt_text)
+            with self.subTest(prompt=str(prompt_path.relative_to(self.harness.repo_source_root))):
+                for snippet in required_snippets:
+                    self.assertIn(snippet, prompt_text)
 
     def test_packaged_benchmark_requirements_omit_assumptions_section(self) -> None:
-        benchmark_roots = (
-            self.harness.repo_source_root / "references" / "benchmarks",
-            self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks",
-        )
+        benchmark_root = self.harness.repo_source_root / "references" / "benchmarks"
 
-        for benchmark_root in benchmark_roots:
-            for requirements_path in sorted(benchmark_root.glob("*/00-requirements.md")):
-                requirements_text = requirements_path.read_text(encoding="utf-8")
+        for requirements_path in sorted(benchmark_root.glob("*/00-requirements.md")):
+            requirements_text = requirements_path.read_text(encoding="utf-8")
 
-                with self.subTest(requirements=str(requirements_path.relative_to(self.harness.repo_source_root))):
-                    self.assertNotIn("## Assumptions", requirements_text)
+            with self.subTest(requirements=str(requirements_path.relative_to(self.harness.repo_source_root))):
+                self.assertNotIn("## Assumptions", requirements_text)
 
-    def test_mirrored_benchmark_prompt_packs_match_primary_tree(self) -> None:
-        primary_root = self.harness.repo_source_root / "references" / "benchmarks"
-        mirror_root = primary_root / "benchmarks"
+    def test_benchmark_prompt_mirror_tree_is_absent(self) -> None:
+        mirror_root = self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks"
+        self.assertEqual([], sorted(mirror_root.glob("*/prompt-recursive-on.md")))
 
-        for mirror_path in sorted(mirror_root.glob("*/prompt-recursive-on.md")):
-            relative_path = mirror_path.relative_to(mirror_root)
-            primary_path = primary_root / relative_path
-
-            with self.subTest(prompt=str(relative_path)):
-                self.assertTrue(primary_path.exists())
-                self.assertEqual(
-                    primary_path.read_text(encoding="utf-8"),
-                    mirror_path.read_text(encoding="utf-8"),
-                )
-
-    def test_mirrored_benchmark_requirements_match_primary_tree(self) -> None:
-        primary_root = self.harness.repo_source_root / "references" / "benchmarks"
-        mirror_root = primary_root / "benchmarks"
-
-        for mirror_path in sorted(mirror_root.glob("*/00-requirements.md")):
-            relative_path = mirror_path.relative_to(mirror_root)
-            primary_path = primary_root / relative_path
-
-            with self.subTest(requirements=str(relative_path)):
-                self.assertTrue(primary_path.exists())
-                self.assertEqual(
-                    primary_path.read_text(encoding="utf-8"),
-                    mirror_path.read_text(encoding="utf-8"),
-                )
+    def test_benchmark_requirements_mirror_tree_is_absent(self) -> None:
+        mirror_root = self.harness.repo_source_root / "references" / "benchmarks" / "benchmarks"
+        self.assertEqual([], sorted(mirror_root.glob("*/00-requirements.md")))
 
 
 if __name__ == "__main__":

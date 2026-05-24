@@ -88,6 +88,8 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `scripts/lint-recursive-run.ps1`
 - `scripts/recursive-review-bundle.py`
 - `scripts/recursive-review-bundle.ps1`
+- `scripts/recursive-closeout.py`
+- `scripts/recursive-closeout.ps1`
 - `scripts/recursive-router-init.py`
 - `scripts/recursive-router-init.ps1`
 - `scripts/recursive-router-probe.py`
@@ -112,6 +114,8 @@ If any bridge doc conflicts with `/.recursive/RECURSIVE.md`, follow `/.recursive
 - `.recursive/scripts/recursive-training-grpo.ps1`
 - `.recursive/scripts/recursive-training-phase8-trigger.py`
 - `.recursive/scripts/recursive-training-phase8-trigger.ps1`
+- `.recursive/scripts/recursive-training-extract.py`
+- `.recursive/scripts/recursive-training-extract.ps1`
 - `.recursive/scripts/recursive-training-sync.py`
 - `.recursive/scripts/recursive-training-sync.ps1`
 - `.recursive/scripts/recursive-training-loader.py`

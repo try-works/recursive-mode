@@ -316,6 +316,20 @@ references/
 - `references/`: templates and reusable guidance
 - `.recursive/`: canonical workflow spec, internal routing/index docs, and durable repo-internal control-plane docs
 
+## Repository Validation
+
+When changing this repository itself, use the explicit module command rather than plain `python -m unittest`:
+
+```bash
+python -m unittest scripts.test_install_recursive_mode scripts.test_lint_recursive_run scripts.test_recursive_phase_rules scripts.test_recursive_review_bundle scripts.test_recursive_router scripts.test_recursive_subagent_action scripts.test_recursive_training scripts.test_run_recursive_benchmark
+```
+
+For disposable end-to-end coverage, run:
+
+```bash
+python scripts/test-recursive-mode-smoke.py
+```
+
 ## Historical Note
 
 This repository evolved from the older `rlm-workflow` project. That name remains historical only; `recursive-mode` is the current product and package surface.

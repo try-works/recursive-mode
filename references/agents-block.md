@@ -69,8 +69,10 @@ Invoke these helper names from the installed recursive-mode skill directory or t
 - `recursive-status`
 - `lint-recursive-run`
 - `recursive-review-bundle`
+- `recursive-closeout`
 - `recursive-subagent-action`
 - `recursive-training-grpo`
+- `recursive-training-extract`
 - `recursive-training-phase8-trigger`
 - `recursive-training-sync`
 - `recursive-training-loader`
