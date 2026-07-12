@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+SCRIPT_DIR = Path(__file__).resolve().parent.parent / "skills" / "recursive-mode" / "scripts"
 
 
 def load_module(module_name: str, filename: str):

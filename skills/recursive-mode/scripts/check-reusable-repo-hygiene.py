@@ -113,11 +113,11 @@ def main() -> None:
         print_ok("No generated local residue such as __pycache__/ or *.pyc is present.")
 
     canonical_workflow = repo_root / ".recursive" / "RECURSIVE.md"
-    packaged_workflow = repo_root / "references" / "bootstrap" / "RECURSIVE.md"
+    packaged_workflow = repo_root / "skills" / "recursive-mode" / "references" / "bootstrap" / "RECURSIVE.md"
     if not packaged_workflow.exists():
         failures += 1
         snapshot_failures += 1
-        print_fail("Missing packaged bootstrap workflow template: references/bootstrap/RECURSIVE.md")
+        print_fail("Missing packaged bootstrap workflow template: skills/recursive-mode/references/bootstrap/RECURSIVE.md")
     elif not canonical_workflow.exists():
         failures += 1
         snapshot_failures += 1

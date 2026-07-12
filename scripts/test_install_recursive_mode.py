@@ -12,7 +12,10 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).with_name("install-recursive-mode.py")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ROOT_SKILL_DIR = REPO_ROOT / "skills" / "recursive-mode"
+RUNTIME_DIR = ROOT_SKILL_DIR / "scripts"
+MODULE_PATH = RUNTIME_DIR / "install-recursive-mode.py"
 SPEC = importlib.util.spec_from_file_location("install_recursive_mode", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"Unable to load install module from {MODULE_PATH}")
@@ -20,7 +23,7 @@ install = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = install
 SPEC.loader.exec_module(install)
 
-ROUTER_LIB_PATH = Path(__file__).with_name("recursive_router_lib.py")
+ROUTER_LIB_PATH = RUNTIME_DIR / "recursive_router_lib.py"
 ROUTER_SPEC = importlib.util.spec_from_file_location("recursive_router_lib", ROUTER_LIB_PATH)
 if ROUTER_SPEC is None or ROUTER_SPEC.loader is None:
     raise RuntimeError(f"Unable to load router module from {ROUTER_LIB_PATH}")
@@ -31,12 +34,13 @@ ROUTER_SPEC.loader.exec_module(router_lib)
 
 class InstallRecursiveModeTests(unittest.TestCase):
     def test_package_surface_includes_recursive_training(self) -> None:
-        repo_root = Path(__file__).resolve().parent.parent
+        repo_root = REPO_ROOT
         installable_skills = {path.parent.name for path in (repo_root / "skills").glob("*/SKILL.md")}
 
         self.assertEqual(
             {
                 "recursive-debugging",
+                "recursive-mode",
                 "recursive-review-bundle",
                 "recursive-router",
                 "recursive-spec",
@@ -47,15 +51,17 @@ class InstallRecursiveModeTests(unittest.TestCase):
             },
             installable_skills,
         )
-        root_skill = (repo_root / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("skills/recursive-training/SKILL.md", root_skill)
+        root_skill = (ROOT_SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("../recursive-training/SKILL.md", root_skill)
+        self.assertFalse((repo_root / "SKILL.md").exists())
+        self.assertTrue((ROOT_SKILL_DIR / "scripts" / "install-recursive-mode.py").exists())
 
     def test_bootstrap_workflow_copy_matches_canonical(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         start = "<!-- RECURSIVE-MODE-CANONICAL:START -->"
         end = "<!-- RECURSIVE-MODE-CANONICAL:END -->"
         canonical_raw = (repo_root / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
-        bootstrap_raw = (repo_root / "references" / "bootstrap" / "RECURSIVE.md").read_text(encoding="utf-8")
+        bootstrap_raw = (ROOT_SKILL_DIR / "references" / "bootstrap" / "RECURSIVE.md").read_text(encoding="utf-8")
 
         canonical = install.normalize_plain_or_wrapped_content(canonical_raw, start, end)
         bootstrap = install.normalize_plain_or_wrapped_content(bootstrap_raw, start, end)
@@ -162,7 +168,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 "New runs should also include `Workflow version: recursive-mode-audit-v2`.",
                 "add `Workflow version: recursive-mode-audit-v2` to `00-requirements.md`",
             ),
-            Path("references/bootstrap/RECURSIVE.md"): (
+            Path("skills/recursive-mode/references/bootstrap/RECURSIVE.md"): (
                 "New runs should also include `Workflow version: recursive-mode-audit-v2`.",
                 "add `Workflow version: recursive-mode-audit-v2` to `00-requirements.md`",
             ),
@@ -190,7 +196,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
     def test_root_docs_list_recursive_router_and_config_surface(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         readme = (repo_root / "README.md").read_text(encoding="utf-8")
-        skill = (repo_root / "SKILL.md").read_text(encoding="utf-8")
+        skill = (repo_root / "skills" / "recursive-mode" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("recursive-router", readme)
         self.assertIn("/.recursive/config/recursive-router.json", readme)
@@ -200,13 +206,17 @@ class InstallRecursiveModeTests(unittest.TestCase):
 
     def test_helper_inventories_include_closeout_and_training_extract(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
-        skill = (repo_root / "SKILL.md").read_text(encoding="utf-8")
+        skill = (repo_root / "skills" / "recursive-mode" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("scripts/recursive-closeout.py", skill)
         self.assertIn("scripts/recursive-closeout.ps1", skill)
         self.assertIn(".recursive/scripts/recursive-training-extract.py", skill)
         self.assertIn(".recursive/scripts/recursive-training-extract.ps1", skill)
 
-        for relative_path in (Path("AGENTS.md"), Path(".codex/AGENTS.md"), Path("references/agents-block.md")):
+        for relative_path in (
+            Path("AGENTS.md"),
+            Path(".codex/AGENTS.md"),
+            Path("skills/recursive-mode/references/agents-block.md"),
+        ):
             content = (repo_root / relative_path).read_text(encoding="utf-8")
             with self.subTest(path=str(relative_path), snippet="recursive-closeout"):
                 self.assertIn("`recursive-closeout`", content)
@@ -268,17 +278,17 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 with self.subTest(path=str(relative_path), snippet=snippet):
                     self.assertIn(snippet, content)
 
-    def test_subskill_docs_use_repo_root_script_examples(self) -> None:
+    def test_subskill_docs_use_bootstrapped_runtime_examples(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
         expectations = {
             Path("skills/recursive-router/SKILL.md"): (
-                "./scripts/recursive-router-init.py",
-                "./scripts/recursive-router-invoke.py",
+                "./.recursive/scripts/recursive-router-init.py",
+                "./.recursive/scripts/recursive-router-invoke.py",
                 "./.recursive/run/<run-id>/router-prompts/code-reviewer-bundle.md",
             ),
             Path("skills/recursive-review-bundle/SKILL.md"): (
-                "./scripts/recursive-review-bundle.py",
-                "./scripts/recursive-review-bundle.ps1",
+                "./.recursive/scripts/recursive-review-bundle.py",
+                "./.recursive/scripts/recursive-review-bundle.ps1",
             ),
         }
         forbidden = {
@@ -316,7 +326,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
 
     def test_agents_block_uses_helper_names_not_missing_root_script_paths(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
-        content = (repo_root / "references" / "agents-block.md").read_text(encoding="utf-8")
+        content = (ROOT_SKILL_DIR / "references" / "agents-block.md").read_text(encoding="utf-8")
 
         self.assertIn("Invoke these helper names", content)
         self.assertIn("`install-recursive-mode`", content)
@@ -397,7 +407,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
             gitignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
             self.assertIn("/.recursive/config/recursive-router-discovered.json", gitignore)
 
-    def test_installer_bootstraps_training_memory_and_scripts(self) -> None:
+    def test_installer_bootstraps_runtime_and_training_memory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="install-recursive-mode-training-") as temp_dir:
             repo_root = Path(temp_dir) / "repo"
             completed = subprocess.run(
@@ -416,6 +426,20 @@ class InstallRecursiveModeTests(unittest.TestCase):
             self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-loader.py").exists())
             self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-sync.py").exists())
             self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-training-extract.py").exists())
+            for script_name in (
+                "recursive-init.py",
+                "recursive-status.py",
+                "lint-recursive-run.py",
+                "recursive-lock.py",
+                "verify-locks.py",
+                "recursive-closeout.py",
+                "recursive-review-bundle.py",
+                "recursive-subagent-action.py",
+                "recursive_phase_rules.py",
+                "recursive_router_lib.py",
+            ):
+                with self.subTest(script_name=script_name):
+                    self.assertTrue((repo_root / ".recursive" / "scripts" / script_name).exists())
             self.assertIn(
                 "RECURSIVE-MODE-MEMORY-POINTERS:START",
                 (repo_root / ".cursorrules").read_text(encoding="utf-8"),
@@ -671,15 +695,15 @@ class InstallRecursiveModeTests(unittest.TestCase):
             canonical_policy = json.loads((repo_root / ".recursive" / "config" / "recursive-router.json").read_text(encoding="utf-8"))
             self.assertEqual(router_lib.default_router_policy(), canonical_policy)
 
-    def test_powershell_installer_source_includes_training_scaffold(self) -> None:
+    def test_powershell_installer_source_includes_runtime_scaffold(self) -> None:
         ps1_script = MODULE_PATH.with_suffix(".ps1").read_text(encoding="utf-8")
 
         self.assertIn('Join-Path $memoryRoot "training"', ps1_script)
-        self.assertIn("recursive-training-loader.py", ps1_script)
-        self.assertIn("recursive-training-extract.py", ps1_script)
+        self.assertIn('$_.Name.StartsWith("recursive-")', ps1_script)
+        self.assertIn('"recursive_phase_rules.py"', ps1_script)
         self.assertIn('Join-Path $recursiveRoot "scripts"', ps1_script)
 
-    def test_skills_cli_local_install_and_bootstrap_include_training_scaffold(self) -> None:
+    def test_skills_cli_local_install_and_bootstrap_include_runtime(self) -> None:
         if os.environ.get("RUN_SKILLS_CLI_INTEGRATION") != "1":
             self.skipTest("Set RUN_SKILLS_CLI_INTEGRATION=1 to enable local Skills CLI integration coverage")
 
@@ -700,6 +724,9 @@ class InstallRecursiveModeTests(unittest.TestCase):
                         "--skill",
                         "*",
                         "--full-depth",
+                        "--agent",
+                        "codex",
+                        "-y",
                     ],
                     cwd=workspace,
                     text=True,
@@ -726,7 +753,8 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 installed_root_skill.exists(),
                 f"installed root skill missing\nSTDOUT:\n{install_completed.stdout}\nSTDERR:\n{install_completed.stderr}",
             )
-            self.assertTrue((installed_root_skill / "skills" / "recursive-training" / "SKILL.md").exists())
+            self.assertTrue((installed_root_skill / "scripts" / "install-recursive-mode.py").exists())
+            self.assertTrue((installed_root_skill / "references" / "bootstrap" / "RECURSIVE.md").exists())
             self.assertTrue((workspace / ".agents" / "skills" / "recursive-training" / "SKILL.md").exists())
 
             bootstrap_completed = subprocess.run(
@@ -751,6 +779,11 @@ class InstallRecursiveModeTests(unittest.TestCase):
             self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-loader.py").exists())
             self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-sync.py").exists())
             self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-training-extract.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-init.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-status.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "lint-recursive-run.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "recursive-lock.py").exists())
+            self.assertTrue((workspace / ".recursive" / "scripts" / "verify-locks.py").exists())
             self.assertTrue((workspace / ".cursorrules").exists())
             self.assertTrue((workspace / "CLAUDE.md").exists())
             self.assertTrue((workspace / ".github" / "copilot-instructions.md").exists())
@@ -758,6 +791,31 @@ class InstallRecursiveModeTests(unittest.TestCase):
             installed_recursive = (workspace / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
             self.assertIn("/.recursive/memory/training/", installed_recursive)
             self.assertIn("recursive-training-loader.py", installed_recursive)
+
+            first_snapshot = {
+                path.relative_to(workspace): path.read_bytes()
+                for path in workspace.rglob("*")
+                if path.is_file() and ".git" not in path.parts
+            }
+            bootstrap_again = subprocess.run(
+                [
+                    sys.executable,
+                    str(installed_root_skill / "scripts" / "install-recursive-mode.py"),
+                    "--repo-root",
+                    str(workspace),
+                ],
+                cwd=workspace,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(bootstrap_again.returncode, 0, bootstrap_again.stderr)
+            second_snapshot = {
+                path.relative_to(workspace): path.read_bytes()
+                for path in workspace.rglob("*")
+                if path.is_file() and ".git" not in path.parts
+            }
+            self.assertEqual(first_snapshot, second_snapshot)
 
     def test_repo_root_router_policy_is_not_personalized(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent

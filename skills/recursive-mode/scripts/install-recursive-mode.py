@@ -10,7 +10,7 @@ Behavior is shared with install-recursive-mode.ps1:
 - upserts the primary Codex plans bridge into .agent/PLANS.md
 - upserts stable assistant-memory pointers into .cursorrules, CLAUDE.md, and .github/copilot-instructions.md
 - bootstraps training memory under .recursive/memory/training/
-- copies recursive-training runtime scripts into .recursive/scripts/
+- copies the packaged runtime scripts into .recursive/scripts/
 - ensures the routed delegation policy scaffold exists under .recursive/config/
 - adds the device-local router discovery inventory to .gitignore
 - mirrors the AGENTS bridge into repo-root AGENTS.md when that file already exists
@@ -635,36 +635,32 @@ def main() -> None:
         ensure_directory(skill_memory_root / subdir)
         ensure_file(skill_memory_root / subdir / ".gitkeep", "")
 
-    # Copy training scripts into .recursive/scripts/ for runtime use
+    # Copy packaged runtime scripts into .recursive/scripts/ so every installed
+    # subskill can use the same repo-local tools after bootstrap.
     scripts_dest = recursive_root / "scripts"
     ensure_directory(scripts_dest)
-    training_scripts = [
-        "recursive-training-grpo.py",
-        "recursive-training-grpo.ps1",
-        "recursive-training-phase8-trigger.py",
-        "recursive-training-phase8-trigger.ps1",
-        "recursive-training-extract.py",
-        "recursive-training-extract.ps1",
-        "recursive-training-sync.py",
-        "recursive-training-sync.ps1",
-        "recursive-training-loader.py",
-        "recursive-training-loader.ps1",
-        "recursive-training-mcp.py",
-        "recursive-training-mcp.ps1",
-    ]
     skill_scripts_dir = skill_root / "scripts"
-    for script_name in training_scripts:
+    runtime_scripts = sorted(
+        path.name
+        for path in skill_scripts_dir.iterdir()
+        if path.is_file()
+        and path.suffix in {".py", ".ps1"}
+        and (
+            path.name.startswith("recursive-")
+            or path.name.startswith("lint-")
+            or path.name.startswith("verify-")
+            or path.name in {"recursive_phase_rules.py", "recursive_router_cli_lib.py", "recursive_router_lib.py"}
+        )
+    )
+    for script_name in runtime_scripts:
         src = skill_scripts_dir / script_name
         dst = scripts_dest / script_name
-        if src.exists():
-            content = src.read_text(encoding="utf-8")
-            if not dst.exists() or dst.read_text(encoding="utf-8") != content:
-                dst.write_text(content, encoding="utf-8")
-                print(f"[OK] Copied training script: {dst}")
-            else:
-                print(f"[OK] Up to date: {dst}")
+        content = src.read_text(encoding="utf-8")
+        if not dst.exists() or dst.read_text(encoding="utf-8") != content:
+            dst.write_text(content, encoding="utf-8")
+            print(f"[OK] Copied runtime script: {dst}")
         else:
-            print(f"[WARN] Missing training script in skill repo: {src}")
+            print(f"[OK] Up to date: {dst}")
 
     ensure_file(run_root / ".gitkeep", "")
     ensure_file(recursive_path, "# RECURSIVE.md\n")

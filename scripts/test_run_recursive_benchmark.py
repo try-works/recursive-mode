@@ -401,7 +401,7 @@ class RecursiveBenchmarkIntegrityTests(unittest.TestCase):
         for relative_path in expected_scripts:
             with self.subTest(path=relative_path):
                 target_path = prepared_repo / Path(relative_path)
-                source_path = Path(rrb.__file__).resolve().parent / Path(relative_path).name
+                source_path = self.harness.runtime_dir / Path(relative_path).name
                 self.assertTrue(target_path.exists(), f"Expected helper script to exist: {relative_path}")
                 self.assertEqual(source_path.read_text(encoding="utf-8"), target_path.read_text(encoding="utf-8"))
 

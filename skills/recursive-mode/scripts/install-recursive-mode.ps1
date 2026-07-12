@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 # - bootstraps the canonical .recursive control-plane layout
 # - upserts stable assistant-memory pointers into .cursorrules, CLAUDE.md, and .github/copilot-instructions.md
 # - bootstraps training memory under .recursive/memory/training/
-# - copies recursive-training runtime scripts into .recursive/scripts/
+# - copies the packaged runtime scripts into .recursive/scripts/
 
 function Write-Utf8NoBom {
   param(
@@ -821,22 +821,17 @@ foreach ($subdir in @("availability", "usage", "issues", "patterns")) {
 
 $scriptsDest = Join-Path $recursiveRoot "scripts"
 Ensure-Directory -Path $scriptsDest
-$trainingScripts = @(
-  "recursive-training-grpo.py",
-  "recursive-training-grpo.ps1",
-  "recursive-training-phase8-trigger.py",
-  "recursive-training-phase8-trigger.ps1",
-  "recursive-training-extract.py",
-  "recursive-training-extract.ps1",
-  "recursive-training-sync.py",
-  "recursive-training-sync.ps1",
-  "recursive-training-loader.py",
-  "recursive-training-loader.ps1",
-  "recursive-training-mcp.py",
-  "recursive-training-mcp.ps1"
-)
 $skillScriptsDir = $PSScriptRoot
-foreach ($scriptName in $trainingScripts) {
+$runtimeScripts = Get-ChildItem -LiteralPath $skillScriptsDir -File | Where-Object {
+  $_.Extension -in @(".py", ".ps1") -and (
+    $_.Name.StartsWith("recursive-") -or
+    $_.Name.StartsWith("lint-") -or
+    $_.Name.StartsWith("verify-") -or
+    $_.Name -in @("recursive_phase_rules.py", "recursive_router_cli_lib.py", "recursive_router_lib.py")
+  )
+} | Sort-Object Name
+foreach ($scriptFile in $runtimeScripts) {
+  $scriptName = $scriptFile.Name
   $src = Join-Path $skillScriptsDir $scriptName
   $dst = Join-Path $scriptsDest $scriptName
   if (Test-Path -LiteralPath $src) {
@@ -850,12 +845,12 @@ foreach ($scriptName in $trainingScripts) {
     }
     if ($existing -ne $content) {
       Write-Utf8NoBom -Path $dst -Content $content
-      Write-Output "[OK] Copied training script: $dst"
+      Write-Output "[OK] Copied runtime script: $dst"
     } else {
       Write-Output "[OK] Up to date: $dst"
     }
   } else {
-    Write-Output "[WARN] Missing training script in skill repo: $src"
+    Write-Output "[WARN] Missing runtime script in skill repo: $src"
   }
 }
 

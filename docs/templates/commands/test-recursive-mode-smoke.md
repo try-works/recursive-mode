@@ -11,13 +11,13 @@ Run recursive-mode smoke tests [quick|full|subagent] [python|powershell|mixed]
 ## Script (Recommended)
 
 ```powershell
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario quick --toolchain mixed
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario full --toolchain python --keep-temp
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario subagent --toolchain mixed
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario quick --toolchain mixed
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario full --toolchain python --keep-temp
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario subagent --toolchain mixed
 
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/test-recursive-mode-smoke.ps1" -Scenario quick -Toolchain mixed
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/test-recursive-mode-smoke.ps1" -Scenario full -Toolchain powershell -KeepTemp
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/test-recursive-mode-smoke.ps1" -Scenario subagent -Toolchain mixed
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/test-recursive-mode-smoke.ps1" -Scenario quick -Toolchain mixed
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/test-recursive-mode-smoke.ps1" -Scenario full -Toolchain powershell -KeepTemp
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/test-recursive-mode-smoke.ps1" -Scenario subagent -Toolchain mixed
 ```
 
 ## What It Does
@@ -72,4 +72,4 @@ The checked-in fixture recipe is:
 
 For richer browser-local evaluations, also consult:
 
-- `references/local-first-web-app-checklist.md`
+- `skills/recursive-mode/references/local-first-web-app-checklist.md`

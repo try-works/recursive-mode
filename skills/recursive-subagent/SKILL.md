@@ -21,7 +21,7 @@ Once the user confirms routed setup, explicitly requests routed delegation, or t
 
 - `/.recursive/config/recursive-router.json`
 - `/.recursive/config/recursive-router-discovered.json`
-- `/skills/recursive-router/SKILL.md`
+- `../recursive-router/SKILL.md`
 
 before choosing a routed external CLI/model path for a role.
 

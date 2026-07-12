@@ -10,8 +10,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT_PATH = REPO_ROOT / "scripts" / "recursive-review-bundle.py"
-PS_SCRIPT_PATH = REPO_ROOT / "scripts" / "recursive-review-bundle.ps1"
+SCRIPT_PATH = REPO_ROOT / "skills" / "recursive-mode" / "scripts" / "recursive-review-bundle.py"
+PS_SCRIPT_PATH = REPO_ROOT / "skills" / "recursive-mode" / "scripts" / "recursive-review-bundle.ps1"
 
 
 class RecursiveReviewBundleTests(unittest.TestCase):

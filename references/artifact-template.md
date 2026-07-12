@@ -2441,15 +2441,15 @@ Before locking (or when a lock verification fails unexpectedly), lint the run ar
 # Python (cross-platform):
 python ./.agents/skills/recursive-mode/scripts/lint-recursive-run.py --run-id "<run-id>"
 # Or, when running from this repo:
-python ./scripts/lint-recursive-run.py --run-id "<run-id>"
+python ./.recursive/scripts/lint-recursive-run.py --run-id "<run-id>"
 python3 ./.agents/skills/recursive-mode/scripts/lint-recursive-run.py --run-id "<run-id>"
-python3 ./scripts/lint-recursive-run.py --run-id "<run-id>"
+python3 ./.recursive/scripts/lint-recursive-run.py --run-id "<run-id>"
 
 # Treat WARN as FAIL
 python ./.agents/skills/recursive-mode/scripts/lint-recursive-run.py --run-id "<run-id>" --strict
-python ./scripts/lint-recursive-run.py --run-id "<run-id>" --strict
+python ./.recursive/scripts/lint-recursive-run.py --run-id "<run-id>" --strict
 python3 ./.agents/skills/recursive-mode/scripts/lint-recursive-run.py --run-id "<run-id>" --strict
-python3 ./scripts/lint-recursive-run.py --run-id "<run-id>" --strict
+python3 ./.recursive/scripts/lint-recursive-run.py --run-id "<run-id>" --strict
 
 # Lint specific run
 .\.agents\skills\recursive-mode\scripts\lint-recursive-run.ps1 -RunId "<run-id>"
@@ -2469,9 +2469,9 @@ Preferred:
 # Python (cross-platform)
 python ./.agents/skills/recursive-mode/scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
 # Or, when running from this repo:
-python ./scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
+python ./.recursive/scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
 python3 ./.agents/skills/recursive-mode/scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
-python3 ./scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
+python3 ./.recursive/scripts/recursive-lock.py --run-id "<run-id>" --artifact "<artifact>.md"
 
 # PowerShell
 .\.agents\skills\recursive-mode\scripts\recursive-lock.ps1 -RunId "<run-id>" -Artifact "<artifact>.md"
@@ -2527,16 +2527,16 @@ Use the provided script to verify all locks in a run:
 # Verify specific run
 python ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>"
 # Or, when running from this repo:
-python ./scripts/verify-locks.py --run-id "<run-id>"
+python ./.recursive/scripts/verify-locks.py --run-id "<run-id>"
 python3 ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>"
-python3 ./scripts/verify-locks.py --run-id "<run-id>"
+python3 ./.recursive/scripts/verify-locks.py --run-id "<run-id>"
 
 # Fix incorrect hashes (use with caution)
 python ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>" --fix
 # Or, when running from this repo:
-python ./scripts/verify-locks.py --run-id "<run-id>" --fix
+python ./.recursive/scripts/verify-locks.py --run-id "<run-id>" --fix
 python3 ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>" --fix
-python3 ./scripts/verify-locks.py --run-id "<run-id>" --fix
+python3 ./.recursive/scripts/verify-locks.py --run-id "<run-id>" --fix
 ```
 
 ```powershell
@@ -2571,5 +2571,4 @@ sed '/^LockHash:/d' .recursive/run/<run-id>/<artifact>.md | tr -d '\r' | sha256s
 ```
 
 Compare computed hash with `LockHash` in artifact header. They must match exactly.
-
 

@@ -238,7 +238,7 @@ If an agent is already inside the repo and needs a lightweight index of what to 
 
 The installable root skill entrypoint is:
 
-- `/SKILL.md`
+- `/skills/recursive-mode/SKILL.md`
 
 ## Benchmarking recursive-mode
 
@@ -269,11 +269,11 @@ The xhard Rust/WASM fixture intentionally starts from a bootstrap-only dependenc
 Maintainer entrypoints:
 
 ```bash
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner codex --scenario scientific-calculator-rust
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner codex --scenario scientific-calculator-rust
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/run-recursive-benchmark.ps1" -Runner all
 ```
 
 ## How To Start A Run
@@ -303,16 +303,19 @@ The important boundary is that prompts stay short and command-like, while the ac
 High level:
 
 ```text
-SKILL.md
 skills/
+  recursive-mode/
+    SKILL.md
+    scripts/
+    references/
 scripts/
 references/
 .recursive/
 ```
 
-- `SKILL.md`: installable root skill entrypoint
+- `skills/recursive-mode/`: installable root skill with its runtime and bootstrap references
 - `skills/`: installable subskills
-- `scripts/`: bootstrap, lint, status, lock, bundle, closeout, smoke, and hygiene tools
+- `scripts/`: maintainer tests, smoke coverage, and benchmark tooling
 - `references/`: templates and reusable guidance
 - `.recursive/`: canonical workflow spec, internal routing/index docs, and durable repo-internal control-plane docs
 
