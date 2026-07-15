@@ -1138,7 +1138,7 @@ model = "kimi-for-coding"
         self.assertEqual(payload["output_text"], prompt_text)
         self.assertIn("<choice>STOP</choice>", payload["raw_stdout"])
         self.assertIn("--work-dir", invocation_args)
-        self.assertEqual(invocation_args[invocation_args.index("--work-dir") + 1], str(self.repo_root))
+        self.assertEqual(invocation_args[invocation_args.index("--work-dir") + 1], str(self.repo_root.resolve()))
         self.assertIn("--output-format", invocation_args)
         self.assertEqual(invocation_args[invocation_args.index("--output-format") + 1], "stream-json")
         self.assertIn("--max-ralph-iterations", invocation_args)
