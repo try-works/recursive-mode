@@ -1842,7 +1842,7 @@ class BenchmarkHarness:
                     "run_template_root": "benchmark/recursive-templates",
                 }
             )
-            bootstrap_template = self.repo_source_root / "references" / "bootstrap" / "RECURSIVE.md"
+            bootstrap_template = self.repo_source_root / "skills" / "recursive-mode" / "references" / "bootstrap" / "RECURSIVE.md"
             if bootstrap_template.exists():
                 context_payload.update(
                     {

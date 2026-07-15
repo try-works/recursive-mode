@@ -78,7 +78,7 @@ The installer bootstraps the canonical layout in a target repo:
 - `/.recursive/scripts/` holds the bootstrapped runtime copies of the training scripts used by the installed scaffold
 - `/.recursive/config/recursive-router.json` is the canonical user-editable routed delegation policy; when an agent updates it, use the router configure-and-verify path instead of saving unchecked bindings
 - `/.recursive/config/recursive-router-discovered.json` is generated locally after router probe or verification, should stay gitignored in target repos, and is not part of the bootstrapped scaffold
-- `references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
+- `skills/recursive-mode/references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
 
 ## Main Maintainer Commands
 

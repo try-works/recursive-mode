@@ -66,7 +66,7 @@ def main() -> int:
     # --- Check scripts exist ---
     if not grpo_script.exists():
         print("ERROR: recursive-training-grpo.py not found.")
-        print("Run: python scripts/install-recursive-mode.py --repo-root .")
+        print("Run: python .agents/skills/recursive-mode/scripts/install-recursive-mode.py --repo-root .")
         return 1
 
     # --- Check enough runs ---
