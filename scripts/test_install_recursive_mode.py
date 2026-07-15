@@ -178,7 +178,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
             Path("docs/templates/commands/recursive-status.md"): (
                 "Workflow Profile: recursive-mode-audit-v2",
             ),
-            Path("references/artifact-template.md"): (
+            Path("skills/recursive-mode/references/artifact-template.md"): (
                 "Use this block in every audited phase for `recursive-mode-audit-v1` and `recursive-mode-audit-v2`:",
                 "Workflow version: `recursive-mode-audit-v2`",
             ),
@@ -264,7 +264,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 "Routed CLI",
                 "Routed Model",
             ),
-            Path("references/artifact-template.md"): (
+            Path("skills/recursive-mode/references/artifact-template.md"): (
                 "Routing Config Path",
                 "Routing Discovery Path",
                 "Routed CLI",
@@ -348,17 +348,6 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertLess(line_count, 500)
         self.assertTrue((repo_root / "skills" / "recursive-training" / "references" / "memory-architecture.md").exists())
         self.assertTrue((repo_root / "skills" / "recursive-training" / "references" / "phase8-and-loading.md").exists())
-
-    def test_subagent_skill_references_repo_root_paths(self) -> None:
-        repo_root = Path(__file__).resolve().parent.parent
-        content = (repo_root / "skills" / "recursive-subagent" / "SKILL.md").read_text(encoding="utf-8")
-
-        self.assertIn("/references/artifact-template.md", content)
-        self.assertIn("/skills/recursive-subagent/agents/code-reviewer.md", content)
-        self.assertIn("/skills/recursive-subagent/agents/implementer.md", content)
-        self.assertNotIn("`references/artifact-template.md`", content)
-        self.assertNotIn("`agents/code-reviewer.md`", content)
-        self.assertNotIn("`agents/implementer.md`", content)
 
     def test_phase_oriented_skills_reflect_current_artifact_contract(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
@@ -755,7 +744,11 @@ class InstallRecursiveModeTests(unittest.TestCase):
             )
             self.assertTrue((installed_root_skill / "scripts" / "install-recursive-mode.py").exists())
             self.assertTrue((installed_root_skill / "references" / "bootstrap" / "RECURSIVE.md").exists())
+            self.assertTrue((installed_root_skill / "references" / "artifact-template.md").exists())
             self.assertTrue((workspace / ".agents" / "skills" / "recursive-training" / "SKILL.md").exists())
+            installed_subagent = workspace / ".agents" / "skills" / "recursive-subagent"
+            self.assertTrue((installed_subagent / "agents" / "code-reviewer.md").exists())
+            self.assertTrue((installed_subagent / "agents" / "implementer.md").exists())
 
             bootstrap_completed = subprocess.run(
                 [
@@ -787,6 +780,24 @@ class InstallRecursiveModeTests(unittest.TestCase):
             self.assertTrue((workspace / ".cursorrules").exists())
             self.assertTrue((workspace / "CLAUDE.md").exists())
             self.assertTrue((workspace / ".github" / "copilot-instructions.md").exists())
+
+            hygiene_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(installed_root_skill / "scripts" / "check-reusable-repo-hygiene.py"),
+                    "--repo-root",
+                    str(workspace),
+                ],
+                cwd=workspace,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                hygiene_completed.returncode,
+                0,
+                f"installed hygiene check failed\nSTDOUT:\n{hygiene_completed.stdout}\nSTDERR:\n{hygiene_completed.stderr}",
+            )
 
             installed_recursive = (workspace / ".recursive" / "RECURSIVE.md").read_text(encoding="utf-8")
             self.assertIn("/.recursive/memory/training/", installed_recursive)

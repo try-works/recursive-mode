@@ -81,7 +81,7 @@ Write-Output ""
 
 Write-Output "Documentation:"
 Write-Output "  - Canonical workflow: .recursive/RECURSIVE.md"
-Write-Output "  - Artifact templates: references/artifact-template.md"
+Write-Output "  - Artifact templates: skills/recursive-mode/references/artifact-template.md"
 Write-Output ""
 
 Write-Output "====================="

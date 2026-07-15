@@ -141,5 +141,5 @@ immediately before choosing that CLI/model, and route through `recursive-router`
 - `/.recursive/STATE.md`
 - `/.recursive/DECISIONS.md`
 - `/.recursive/memory/MEMORY.md`
-- `../../references/artifact-template.md`
+- `../recursive-mode/references/artifact-template.md`
 - `./references/patterns.md`

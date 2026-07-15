@@ -20,7 +20,7 @@ If you just need a lightweight routing/index doc for what to read under `/.recur
 
 Installable entrypoints:
 
-- `/SKILL.md`
+- `/skills/recursive-mode/SKILL.md`
 - `/skills/recursive-spec/SKILL.md`
 - `/skills/recursive-worktree/SKILL.md`
 - `/skills/recursive-debugging/SKILL.md`
@@ -64,7 +64,7 @@ The installer bootstraps the canonical layout in a target repo:
         phase8-skill-memory-promotion.md
     archive/
   scripts/
-    recursive-training-*.py / *.ps1
+    installed runtime scripts copied from the `recursive-mode` package
   run/
     <run-id>/
 .codex/AGENTS.md
@@ -75,7 +75,7 @@ The installer bootstraps the canonical layout in a target repo:
 - `/.recursive/AGENTS.md` is a lightweight internal router/index
 - `/.recursive/RECURSIVE.md` remains the only workflow source of truth
 - `/.recursive/memory/training/` stores extracted experiential learnings from completed runs, indexed through `/.recursive/memory/MEMORY.md`
-- `/.recursive/scripts/` holds the bootstrapped runtime copies of the training scripts used by the installed scaffold
+- `/.recursive/scripts/` holds the complete bootstrapped runtime copied from the installed `recursive-mode` package
 - `/.recursive/config/recursive-router.json` is the canonical user-editable routed delegation policy; when an agent updates it, use the router configure-and-verify path instead of saving unchecked bindings
 - `/.recursive/config/recursive-router-discovered.json` is generated locally after router probe or verification, should stay gitignored in target repos, and is not part of the bootstrapped scaffold
 - `skills/recursive-mode/references/bootstrap/RECURSIVE.md` is the packaged non-hidden bootstrap copy that installers use from installed skill directories; keep it byte-for-byte aligned with `/.recursive/RECURSIVE.md`
@@ -157,10 +157,10 @@ Run the paired benchmark harness:
 The benchmark add-on is intentionally not part of the default exported recursive-mode package surface; use it only when benchmarking is explicitly requested.
 
 ```bash
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
-python "<SKILL_DIR>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/run-recursive-benchmark.ps1" -Runner all -Scenario local-first-planner
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner all --scenario local-first-planner
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner kimi --scenario team-capacity-board --arm-mode parallel
+python "<REPO_ROOT>/scripts/run-recursive-benchmark.py" --runner opencode --opencode-model opencode/gpt-5-nano --scenario team-capacity-board
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/run-recursive-benchmark.ps1" -Runner all -Scenario local-first-planner
 ```
 
 ## Maintainer Smoke Harness
@@ -174,12 +174,12 @@ python -m unittest scripts.test_install_recursive_mode scripts.test_lint_recursi
 Run disposable regression coverage when changing this repo itself:
 
 ```bash
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario quick --toolchain mixed
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario full --toolchain python --keep-temp
-python "<SKILL_DIR>/scripts/test-recursive-mode-smoke.py" --scenario subagent --toolchain mixed
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario quick --toolchain mixed
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario full --toolchain python --keep-temp
+python "<REPO_ROOT>/scripts/test-recursive-mode-smoke.py" --scenario subagent --toolchain mixed
 
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/test-recursive-mode-smoke.ps1" -Scenario quick -Toolchain mixed
-pwsh -NoProfile -File "<SKILL_DIR>/scripts/test-recursive-mode-smoke.ps1" -Scenario subagent -Toolchain mixed
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/test-recursive-mode-smoke.ps1" -Scenario quick -Toolchain mixed
+pwsh -NoProfile -File "<REPO_ROOT>/scripts/test-recursive-mode-smoke.ps1" -Scenario subagent -Toolchain mixed
 ```
 
 Notes:

@@ -85,7 +85,7 @@ fi
 
 echo "Documentation:"
 echo "  - Canonical workflow: .recursive/RECURSIVE.md"
-echo "  - Artifact templates: references/artifact-template.md"
+echo "  - Artifact templates: skills/recursive-mode/references/artifact-template.md"
 echo ""
 
 echo "====================="
