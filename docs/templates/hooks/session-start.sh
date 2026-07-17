@@ -19,16 +19,16 @@ bootstrap_recursive_mode() {
     echo "Bootstrapping recursive-mode scaffold in $repo_root ..."
 
     if command -v python3 >/dev/null 2>&1; then
-        python3 "$PLUGIN_ROOT/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
+        python3 "$PLUGIN_ROOT/skills/recursive-mode/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
     fi
     if command -v python >/dev/null 2>&1; then
-        python "$PLUGIN_ROOT/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
+        python "$PLUGIN_ROOT/skills/recursive-mode/scripts/install-recursive-mode.py" --repo-root "$repo_root" && return 0
     fi
     if command -v pwsh >/dev/null 2>&1; then
-        pwsh -NoProfile -File "$PLUGIN_ROOT/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
+        pwsh -NoProfile -File "$PLUGIN_ROOT/skills/recursive-mode/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
     fi
     if command -v powershell >/dev/null 2>&1; then
-        powershell -ExecutionPolicy Bypass -File "$PLUGIN_ROOT/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
+        powershell -ExecutionPolicy Bypass -File "$PLUGIN_ROOT/skills/recursive-mode/scripts/install-recursive-mode.ps1" -RepoRoot "$repo_root" && return 0
     fi
 
     echo "Warning: Could not auto-bootstrap recursive-mode. Run one of the install-recursive-mode scripts manually."
@@ -40,10 +40,13 @@ echo "recursive-mode"
 echo "====================="
 echo ""
 
+RECURSIVE_MODE_READY=false
 if git rev-parse --git-dir > /dev/null 2>&1; then
     REPO_ROOT=$(git rev-parse --show-toplevel)
     echo "Repository: $(basename "$REPO_ROOT")"
-    bootstrap_recursive_mode "$REPO_ROOT" || true
+    if bootstrap_recursive_mode "$REPO_ROOT"; then
+        RECURSIVE_MODE_READY=true
+    fi
 else
     echo "Warning: Not in a git repository. recursive-mode expects version control."
 fi
@@ -94,5 +97,7 @@ echo ""
 export RECURSIVE_MODE_ROOT="$PLUGIN_ROOT"
 export RECURSIVE_MODE_VERSION="2.0.0"
 
-echo "[OK] recursive-mode ready"
+if [ "$RECURSIVE_MODE_READY" = true ]; then
+    echo "[OK] recursive-mode ready"
+fi
 echo ""
