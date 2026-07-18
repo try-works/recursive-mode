@@ -6,6 +6,7 @@ Check a reusable workflow/skill repository for committed run residue.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -73,6 +74,33 @@ def iter_text_files(repo_root: Path) -> list[Path]:
         if path.suffix.lower() in TEXT_SUFFIXES:
             candidates.append(path)
     return sorted(candidates)
+
+
+def sanitized_skills_lock_content(content: str) -> str | None:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return None
+
+    skills = payload.get("skills")
+    if not isinstance(skills, dict):
+        return None
+
+    modified = False
+    for metadata in skills.values():
+        if not isinstance(metadata, dict):
+            continue
+        if metadata.get("sourceType") != "local":
+            continue
+        source = metadata.get("source")
+        if not isinstance(source, str):
+            continue
+        metadata["source"] = "<local-skill-source>"
+        modified = True
+
+    if not modified:
+        return None
+    return json.dumps(payload, sort_keys=True)
 
 
 def print_fail(message: str) -> None:
@@ -173,7 +201,13 @@ def main() -> None:
             print_fail(f"{rel} contains a concrete recursive run reference: {run_match.group(0)}")
 
         for pattern in TEMP_PATH_RESIDUE_RES:
-            temp_match = pattern.search(content)
+            search_content = content
+            if rel == "skills-lock.json":
+                sanitized = sanitized_skills_lock_content(content)
+                if sanitized is not None:
+                    search_content = sanitized
+
+            temp_match = pattern.search(search_content)
             if temp_match:
                 failures += 1
                 run_contamination_failures += 1

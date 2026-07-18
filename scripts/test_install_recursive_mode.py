@@ -692,6 +692,66 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn('"recursive_phase_rules.py"', ps1_script)
         self.assertIn('Join-Path $recursiveRoot "scripts"', ps1_script)
 
+    def test_shell_installer_source_includes_runtime_fallbacks(self) -> None:
+        shell_script = MODULE_PATH.with_suffix(".sh").read_text(encoding="utf-8")
+
+        self.assertIn("run_python_installer python3", shell_script)
+        self.assertIn("run_python_installer python", shell_script)
+        self.assertIn('py -3 "$SCRIPT_DIR/install-recursive-mode.py"', shell_script)
+        self.assertIn('run_powershell_installer pwsh', shell_script)
+        self.assertIn('run_powershell_installer powershell', shell_script)
+        self.assertIn('"-RepoRoot"', shell_script)
+
+    def test_hygiene_checker_allows_local_skills_lock_temp_sources(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-hygiene-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+
+            skills_lock = {
+                "version": 1,
+                "skills": {
+                    "recursive-mode": {
+                        "source": r"C:\\Users\\example\\AppData\\Local\\Temp\\skills-src",
+                        "sourceType": "local",
+                        "computedHash": "abc123",
+                    }
+                },
+            }
+            (repo_root / "skills-lock.json").write_text(
+                json.dumps(skills_lock, indent=2),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            hygiene_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH.with_name("check-reusable-repo-hygiene.py")),
+                    "--repo-root",
+                    str(repo_root),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                hygiene_completed.returncode,
+                0,
+                f"hygiene check failed\nSTDOUT:\n{hygiene_completed.stdout}\nSTDERR:\n{hygiene_completed.stderr}",
+            )
+
     def test_skills_cli_local_install_and_bootstrap_include_runtime(self) -> None:
         if os.environ.get("RUN_SKILLS_CLI_INTEGRATION") != "1":
             self.skipTest("Set RUN_SKILLS_CLI_INTEGRATION=1 to enable local Skills CLI integration coverage")
