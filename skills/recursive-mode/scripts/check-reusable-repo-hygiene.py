@@ -76,6 +76,13 @@ def iter_text_files(repo_root: Path) -> list[Path]:
     return sorted(candidates)
 
 
+def is_installed_skill_workspace(repo_root: Path) -> bool:
+    return (
+        (repo_root / ".agents" / "skills" / "recursive-mode").exists()
+        and not (repo_root / "skills" / "recursive-mode").exists()
+    )
+
+
 def sanitized_skills_lock_content(content: str) -> str | None:
     try:
         payload = json.loads(content)
@@ -126,6 +133,7 @@ def main() -> None:
     run_contamination_failures = 0
     generated_residue_failures = 0
     snapshot_failures = 0
+    allow_local_skills_lock_sources = is_installed_skill_workspace(repo_root)
 
     run_root = repo_root / ".recursive" / "run"
     if run_root.exists():
@@ -202,7 +210,7 @@ def main() -> None:
 
         for pattern in TEMP_PATH_RESIDUE_RES:
             search_content = content
-            if rel == "skills-lock.json":
+            if rel == "skills-lock.json" and allow_local_skills_lock_sources:
                 sanitized = sanitized_skills_lock_content(content)
                 if sanitized is not None:
                     search_content = sanitized

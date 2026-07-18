@@ -701,9 +701,135 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn('run_powershell_installer pwsh', shell_script)
         self.assertIn('run_powershell_installer powershell', shell_script)
         self.assertIn('"-RepoRoot"', shell_script)
+        self.assertIn('"-SkipRecursiveUpdate"', shell_script)
+
+    def test_shell_installer_powershell_fallback_preserves_skip_recursive_update(self) -> None:
+        bash_candidates = []
+        if os.name == "nt":
+            bash_candidates.extend(
+                [
+                    Path(r"C:\Program Files\Git\bin\bash.exe"),
+                    Path(r"C:\Program Files\Git\usr\bin\bash.exe"),
+                ]
+            )
+        bash_path = next((candidate for candidate in bash_candidates if candidate.exists()), None)
+        if bash_path is None:
+            bash_from_path = shutil.which("bash")
+            if bash_from_path:
+                bash_path = Path(bash_from_path)
+        if bash_path is None:
+            self.skipTest("bash is required for shell installer fallback coverage")
+
+        powershell = shutil.which("pwsh") or shutil.which("powershell")
+        if powershell is None:
+            self.skipTest("PowerShell is required for shell installer fallback coverage")
+
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-shell-fallback-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            driver_path = Path(temp_dir) / "run-shell-installer.sh"
+
+            if os.name == "nt":
+                script_target = MODULE_PATH.with_suffix(".sh").resolve()
+                repo_target = repo_root.resolve()
+
+                def to_git_bash_path(path: Path) -> str:
+                    raw = path.as_posix()
+                    if len(raw) >= 2 and raw[1] == ":":
+                        return f"/{raw[0].lower()}/{raw[3:]}"
+                    return raw
+
+                path_entries = []
+                for executable in (shutil.which("pwsh"), shutil.which("powershell")):
+                    if not executable:
+                        continue
+                    parent = Path(executable).resolve().parent
+                    entry = to_git_bash_path(parent)
+                    if entry not in path_entries:
+                        path_entries.append(entry)
+                path_entries.extend(["/usr/bin", "/bin"])
+                driver_lines = [
+                    "#!/usr/bin/env bash",
+                    "set -e",
+                    f"export PATH='{':'.join(path_entries)}'",
+                    f"'{to_git_bash_path(script_target)}' --skip-recursive-update --repo-root '{to_git_bash_path(repo_target)}'",
+                ]
+            else:
+                driver_lines = [
+                    "#!/usr/bin/env bash",
+                    "set -e",
+                    f"'{MODULE_PATH.with_suffix('.sh')}' --skip-recursive-update --repo-root '{repo_root}'",
+                ]
+
+            driver_path.write_text("\n".join(driver_lines) + "\n", encoding="utf-8", newline="\n")
+            completed = subprocess.run(
+                [str(bash_path), str(driver_path)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"shell installer fallback failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+            self.assertIn("Skipped RECURSIVE.md update by configuration.", completed.stdout)
+            self.assertTrue((repo_root / ".recursive" / "scripts" / "recursive-init.py").exists())
 
     def test_hygiene_checker_allows_local_skills_lock_temp_sources(self) -> None:
         with tempfile.TemporaryDirectory(prefix="install-recursive-mode-hygiene-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"installer failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            )
+
+            (repo_root / ".agents" / "skills" / "recursive-mode").mkdir(parents=True, exist_ok=True)
+            skills_lock = {
+                "version": 1,
+                "skills": {
+                    "recursive-mode": {
+                        "source": r"C:\\Users\\example\\AppData\\Local\\Temp\\skills-src",
+                        "sourceType": "local",
+                        "computedHash": "abc123",
+                    }
+                },
+            }
+            (repo_root / "skills-lock.json").write_text(
+                json.dumps(skills_lock, indent=2),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            hygiene_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH.with_name("check-reusable-repo-hygiene.py")),
+                    "--repo-root",
+                    str(repo_root),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                hygiene_completed.returncode,
+                0,
+                f"hygiene check failed\nSTDOUT:\n{hygiene_completed.stdout}\nSTDERR:\n{hygiene_completed.stderr}",
+            )
+
+    def test_hygiene_checker_rejects_local_skills_lock_temp_sources_outside_installed_workspace(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-hygiene-source-") as temp_dir:
             repo_root = Path(temp_dir) / "repo"
             completed = subprocess.run(
                 [sys.executable, str(MODULE_PATH), "--repo-root", str(repo_root)],
@@ -746,11 +872,12 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 check=False,
             )
 
-            self.assertEqual(
+            self.assertNotEqual(
                 hygiene_completed.returncode,
                 0,
-                f"hygiene check failed\nSTDOUT:\n{hygiene_completed.stdout}\nSTDERR:\n{hygiene_completed.stderr}",
+                "hygiene check unexpectedly passed for temp-path residue in source workspace",
             )
+            self.assertIn("skills-lock.json contains temp-path residue", hygiene_completed.stdout)
 
     def test_skills_cli_local_install_and_bootstrap_include_runtime(self) -> None:
         if os.environ.get("RUN_SKILLS_CLI_INTEGRATION") != "1":

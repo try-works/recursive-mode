@@ -17,6 +17,10 @@ translate_args_for_powershell() {
   POWERSHELL_ARGS=()
   while (($#)); do
     case "$1" in
+      --skip-recursive-update)
+        POWERSHELL_ARGS+=("-SkipRecursiveUpdate")
+        shift
+        ;;
       --repo-root)
         if (($# < 2)); then
           echo "Missing value for --repo-root." >&2
