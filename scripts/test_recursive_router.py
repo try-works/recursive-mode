@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS_ROOT = REPO_ROOT / "scripts"
+SCRIPTS_ROOT = REPO_ROOT / "skills" / "recursive-mode" / "scripts"
 
 
 def write_text(path: Path, content: str) -> None:
@@ -1138,7 +1138,7 @@ model = "kimi-for-coding"
         self.assertEqual(payload["output_text"], prompt_text)
         self.assertIn("<choice>STOP</choice>", payload["raw_stdout"])
         self.assertIn("--work-dir", invocation_args)
-        self.assertEqual(invocation_args[invocation_args.index("--work-dir") + 1], str(self.repo_root))
+        self.assertEqual(invocation_args[invocation_args.index("--work-dir") + 1], str(self.repo_root.resolve()))
         self.assertIn("--output-format", invocation_args)
         self.assertEqual(invocation_args[invocation_args.index("--output-format") + 1], "stream-json")
         self.assertIn("--max-ralph-iterations", invocation_args)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT_PATH = REPO_ROOT / "scripts" / "recursive-subagent-action.py"
+SCRIPT_PATH = REPO_ROOT / "skills" / "recursive-mode" / "scripts" / "recursive-subagent-action.py"
 
 
 class RecursiveSubagentActionTests(unittest.TestCase):

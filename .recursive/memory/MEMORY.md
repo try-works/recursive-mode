@@ -38,7 +38,7 @@ Control-plane docs are not memory docs:
 
 ## Freshness Rules
 
-- Durable memory docs must declare the metadata defined in `references/artifact-template.md`.
+- Durable memory docs must declare the metadata defined in `skills/recursive-mode/references/artifact-template.md`.
 - Any doc whose `Owns-Paths` or `Watch-Paths` overlaps final changed code paths must be reviewed in Phase 8.
 - Affected `CURRENT` docs should be downgraded to `SUSPECT` until revalidated against final code, `STATE.md`, and `DECISIONS.md`.
 - If changed paths have no owning domain doc, create one or record the uncovered-path follow-up in `08-memory-impact.md`.

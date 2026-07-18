@@ -403,7 +403,7 @@ Some repos use recursive-mode to improve a reusable skill, workflow, or template
 - do not update `STATE.md`, `DECISIONS.md`, or durable memory docs with session-specific implementation history unless that content is intentionally promoted as generic reusable guidance
 - do not elevate environment-specific observations into durable memory without generalizing them first
 
-Before closeout in a reusable-skill repo, run `scripts/check-reusable-repo-hygiene.py` or `scripts/check-reusable-repo-hygiene.ps1` and confirm the shipped repo contains only reusable workflow/skill content, not session residue.
+Before closeout in a reusable-skill repo, run the packaged `check-reusable-repo-hygiene` helper and confirm the shipped repo contains only reusable workflow/skill content, not session residue.
 For repo-improvement work in a reusable-skill repo, the task is not complete until the final handoff snapshot is clean:
 
 - no committed run-instance artifacts
@@ -412,7 +412,7 @@ For repo-improvement work in a reusable-skill repo, the task is not complete unt
 - no temp-path residue
 - no dirty worktree at handoff time
 
-Use `scripts/check-reusable-repo-hygiene.py --require-clean-git` (or the PowerShell wrapper) as the final cleanliness check before calling the repo handoff-ready.
+Run the packaged `check-reusable-repo-hygiene` helper with `--require-clean-git` as the final cleanliness check before calling the repo handoff-ready.
 
 ## Phase definitions
 
@@ -750,7 +750,7 @@ Recursive phases are one-way. Iteration is allowed within a phase, but after a p
 ### DRAFT vs LOCKED
 
 - While a phase is in progress, its output artifact status is `DRAFT`. The agent may revise it until both gates pass.
-- When both gates pass, the agent must lock the artifact with `scripts/recursive-lock.py` or `scripts/recursive-lock.ps1`. The lock command is the primary supported path and must:
+- When both gates pass, the agent must lock the artifact with `.recursive/scripts/recursive-lock.py` or `.recursive/scripts/recursive-lock.ps1`. The lock command is the primary supported path and must:
   1) verify the artifact is lockable,
   2) set Status to `LOCKED`,
   3) set `LockedAt`,
@@ -777,11 +777,11 @@ that contains its own hash.
 
 #### Preferred: use the lock command
 
-Use `scripts/recursive-lock.py` (cross-platform) or `scripts/recursive-lock.ps1` (PowerShell) to lock a draft artifact. Those commands validate lockability, write `Status: LOCKED`, write `LockedAt`, and compute `LockHash` using the canonical normalization rules.
+Use `.recursive/scripts/recursive-lock.py` (cross-platform) or `.recursive/scripts/recursive-lock.ps1` (PowerShell) to lock a draft artifact. Those commands validate lockability, write `Status: LOCKED`, write `LockedAt`, and compute `LockHash` using the canonical normalization rules.
 
 #### Secondary: verify an existing lock
 
-Use `scripts/verify-locks.py` (cross-platform) or `scripts/verify-locks.ps1` (PowerShell) to verify and (optionally) fix mismatched hashes on already locked artifacts.
+Use `.recursive/scripts/verify-locks.py` (cross-platform) or `.recursive/scripts/verify-locks.ps1` (PowerShell) to verify and (optionally) fix mismatched hashes on already locked artifacts.
 
 #### Manual computation examples
 
@@ -1761,8 +1761,8 @@ The LockHash is a SHA-256 hash of the normalized artifact content at lock time. 
 "How to compute LockHash" above for the canonical normalization rules.
 
 **Preferred:**
-- use `scripts/verify-locks.py` for cross-platform verification (and optional fixing)
-- use `scripts/verify-locks.ps1` when running in PowerShell environments
+- use `.recursive/scripts/verify-locks.py` for cross-platform verification (and optional fixing)
+- use `.recursive/scripts/verify-locks.ps1` when running in PowerShell environments
 
 **PowerShell:**
 ```powershell
@@ -1798,13 +1798,13 @@ Use the provided verifier scripts to verify all locks:
 
 ```bash
 # Verify specific run
-python ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>"
+python ./.recursive/scripts/verify-locks.py --run-id "<run-id>"
 
 # Scan all runs
-python ./.agents/skills/recursive-mode/scripts/verify-locks.py
+python ./.recursive/scripts/verify-locks.py
 
 # Fix incorrect hashes (use with caution)
-python ./.agents/skills/recursive-mode/scripts/verify-locks.py --run-id "<run-id>" --fix
+python ./.recursive/scripts/verify-locks.py --run-id "<run-id>" --fix
 ```
 
 ```powershell

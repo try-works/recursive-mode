@@ -112,7 +112,7 @@ Do not create the run folder immediately.
 1. Draft and refine the requirements with the user first.
 2. Keep the draft in a temporary non-repo artifact until approval.
 3. Confirm the user approves the spec and that it is complete enough to proceed.
-4. Create the run with `scripts/recursive-init.py` or `scripts/recursive-init.ps1`.
+4. Create the run with `.recursive/scripts/recursive-init.py` or `.recursive/scripts/recursive-init.ps1`.
 5. Replace the scaffolded `00-requirements.md` with the approved requirements content.
 
 This keeps the run artifact grounded in user-approved requirements instead of half-formed notes.
@@ -141,5 +141,5 @@ immediately before choosing that CLI/model, and route through `recursive-router`
 - `/.recursive/STATE.md`
 - `/.recursive/DECISIONS.md`
 - `/.recursive/memory/MEMORY.md`
-- `../../references/artifact-template.md`
+- `../recursive-mode/references/artifact-template.md`
 - `./references/patterns.md`

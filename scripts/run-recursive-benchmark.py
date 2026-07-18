@@ -418,6 +418,7 @@ class BenchmarkHarness:
         self.args = args
         self.script_dir = Path(__file__).resolve().parent
         self.repo_source_root = self.script_dir.parent
+        self.runtime_dir = self.repo_source_root / "skills" / "recursive-mode" / "scripts"
         self.scenario_name = args.scenario
         self.scenario_meta = SCENARIOS[self.scenario_name]
         self.scenario_title = self.scenario_meta["title"]
@@ -1745,7 +1746,7 @@ class BenchmarkHarness:
             seeded_skill_docs: list[str] = []
             seeded_helper_scripts: list[str] = []
             bootstrap_result = self.run_command(
-                [self.python_exe, str(self.script_dir / "install-recursive-mode.py"), "--repo-root", str(repo_root)],
+                [self.python_exe, str(self.runtime_dir / "install-recursive-mode.py"), "--repo-root", str(repo_root)],
                 cwd=repo_root,
                 timeout_seconds=self.command_timeout,
                 check=False,
@@ -1787,7 +1788,7 @@ class BenchmarkHarness:
             init_result = self.run_command(
                 [
                     self.python_exe,
-                    str(self.script_dir / "recursive-init.py"),
+                    str(self.runtime_dir / "recursive-init.py"),
                     "--repo-root",
                     str(repo_root),
                     "--run-id",
@@ -1841,7 +1842,7 @@ class BenchmarkHarness:
                     "run_template_root": "benchmark/recursive-templates",
                 }
             )
-            bootstrap_template = self.repo_source_root / "references" / "bootstrap" / "RECURSIVE.md"
+            bootstrap_template = self.repo_source_root / "skills" / "recursive-mode" / "references" / "bootstrap" / "RECURSIVE.md"
             if bootstrap_template.exists():
                 context_payload.update(
                     {
@@ -2187,7 +2188,7 @@ class BenchmarkHarness:
     def recursive_helper_script_sources(self) -> dict[str, Path]:
         sources: dict[str, Path] = {}
         for file_name in RECURSIVE_HELPER_SCRIPT_NAMES:
-            source_path = self.script_dir / file_name
+            source_path = self.runtime_dir / file_name
             if source_path.exists():
                 sources[f"scripts/{file_name}"] = source_path
         return sources
@@ -7250,7 +7251,7 @@ class BenchmarkHarness:
         lint_result = self.run_command(
             [
                 self.python_exe,
-                str(self.script_dir / "lint-recursive-run.py"),
+                str(self.runtime_dir / "lint-recursive-run.py"),
                 "--repo-root",
                 str(lint_repo_root),
                 "--run-id",

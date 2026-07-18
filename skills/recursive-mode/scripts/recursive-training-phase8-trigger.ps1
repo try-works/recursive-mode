@@ -28,8 +28,7 @@
 
 .EXAMPLE
     .\recursive-training-phase8-trigger.ps1 -RepoRoot . -RunId phase25 -Auto
-#
->
+#>
 param(
     [Parameter(Mandatory)]
     [string]$RepoRoot,

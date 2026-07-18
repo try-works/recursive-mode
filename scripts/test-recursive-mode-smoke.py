@@ -128,6 +128,7 @@ class SmokeHarness:
         self.command_timeout = command_timeout
         self.script_dir = Path(__file__).resolve().parent
         self.repo_source_root = self.script_dir.parent
+        self.runtime_dir = self.repo_source_root / "skills" / "recursive-mode" / "scripts"
         self.python_exe = Path(sys.executable).resolve()
         self.preflight_notes: list[str] = []
         self.powershell_exe = self._resolve_powershell()
@@ -250,7 +251,7 @@ class SmokeHarness:
         return self.run_command(["git", *args], cwd=self.repo_root, allowed_returncodes=allowed_returncodes)
 
     def python_command(self, script_name: str, *args: str) -> list[str]:
-        return [str(self.python_exe), str(self.script_dir / script_name), *args]
+        return [str(self.python_exe), str(self.runtime_dir / script_name), *args]
 
     def powershell_command(self, script_name: str, *args: str) -> list[str]:
         if self.powershell_exe is None:
@@ -261,7 +262,7 @@ class SmokeHarness:
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(self.script_dir / script_name),
+            str(self.runtime_dir / script_name),
             *args,
         ]
 

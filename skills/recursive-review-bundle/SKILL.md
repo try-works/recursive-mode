@@ -13,8 +13,8 @@ This skill does not replace `/.recursive/RECURSIVE.md`. It packages the context 
 
 Use the repo scripts:
 
-- `./scripts/recursive-review-bundle.py`
-- `./scripts/recursive-review-bundle.ps1`
+- `./.recursive/scripts/recursive-review-bundle.py`
+- `./.recursive/scripts/recursive-review-bundle.ps1`
 
 Prefer the Python script when both toolchains are available. Use the PowerShell wrapper when the delegated path is already PowerShell-oriented.
 
@@ -36,7 +36,7 @@ Add explicit evidence refs or addenda when they matter. The bundle generator wil
 ## Typical Commands
 
 ```bash
-python ./scripts/recursive-review-bundle.py \
+python ./.recursive/scripts/recursive-review-bundle.py \
   --repo-root . \
   --run-id "<run-id>" \
   --phase "03.5 Code Review" \
@@ -53,7 +53,7 @@ python ./scripts/recursive-review-bundle.py \
 ```
 
 ```powershell
-pwsh -NoProfile -File ./scripts/recursive-review-bundle.ps1 `
+pwsh -NoProfile -File ./.recursive/scripts/recursive-review-bundle.ps1 `
   -RepoRoot . `
   -RunId "<run-id>" `
   -Phase "03.5 Code Review" `
@@ -88,4 +88,4 @@ immediately before the delegated call, and include the relevant routing-path cit
 
 - `/.recursive/RECURSIVE.md`
 - `/docs/templates/commands/recursive-review-bundle.md`
-- `/skills/recursive-subagent/SKILL.md`
+- `../recursive-subagent/SKILL.md`

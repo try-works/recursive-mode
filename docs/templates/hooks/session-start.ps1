@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $PluginRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+$script:RecursiveModeReady = $false
 
 function Invoke-RecursiveBootstrap {
     param(
@@ -16,30 +17,30 @@ function Invoke-RecursiveBootstrap {
     )
 
     if (Test-Path (Join-Path $RepoRoot ".recursive\RECURSIVE.md")) {
-        return $true
+        $script:RecursiveModeReady = $true
+        return
     }
 
     Write-Output "Bootstrapping recursive-mode scaffold in $RepoRoot ..."
 
     if (Get-Command python -ErrorAction SilentlyContinue) {
-        & python (Join-Path $PluginRoot "scripts\install-recursive-mode.py") --repo-root $RepoRoot
-        if ($LASTEXITCODE -eq 0) { return $true }
+        & python (Join-Path $PluginRoot "skills\recursive-mode\scripts\install-recursive-mode.py") --repo-root $RepoRoot
+        if ($LASTEXITCODE -eq 0) { $script:RecursiveModeReady = $true; return }
     }
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        & py -3 (Join-Path $PluginRoot "scripts\install-recursive-mode.py") --repo-root $RepoRoot
-        if ($LASTEXITCODE -eq 0) { return $true }
+        & py -3 (Join-Path $PluginRoot "skills\recursive-mode\scripts\install-recursive-mode.py") --repo-root $RepoRoot
+        if ($LASTEXITCODE -eq 0) { $script:RecursiveModeReady = $true; return }
     }
     if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-        & pwsh -NoProfile -File (Join-Path $PluginRoot "scripts\install-recursive-mode.ps1") -RepoRoot $RepoRoot
-        if ($LASTEXITCODE -eq 0) { return $true }
+        & pwsh -NoProfile -File (Join-Path $PluginRoot "skills\recursive-mode\scripts\install-recursive-mode.ps1") -RepoRoot $RepoRoot
+        if ($LASTEXITCODE -eq 0) { $script:RecursiveModeReady = $true; return }
     }
     if (Get-Command powershell -ErrorAction SilentlyContinue) {
-        & powershell -ExecutionPolicy Bypass -File (Join-Path $PluginRoot "scripts\install-recursive-mode.ps1") -RepoRoot $RepoRoot
-        if ($LASTEXITCODE -eq 0) { return $true }
+        & powershell -ExecutionPolicy Bypass -File (Join-Path $PluginRoot "skills\recursive-mode\scripts\install-recursive-mode.ps1") -RepoRoot $RepoRoot
+        if ($LASTEXITCODE -eq 0) { $script:RecursiveModeReady = $true; return }
     }
 
     Write-Warning "Could not auto-bootstrap recursive-mode. Run one of the install-recursive-mode scripts manually."
-    return $false
 }
 
 Write-Output ""
@@ -81,7 +82,7 @@ Write-Output ""
 
 Write-Output "Documentation:"
 Write-Output "  - Canonical workflow: .recursive/RECURSIVE.md"
-Write-Output "  - Artifact templates: references/artifact-template.md"
+Write-Output "  - Artifact templates: skills/recursive-mode/references/artifact-template.md"
 Write-Output ""
 
 Write-Output "====================="
@@ -90,5 +91,7 @@ Write-Output ""
 $env:RECURSIVE_MODE_ROOT = $PluginRoot
 $env:RECURSIVE_MODE_VERSION = "2.0.0"
 
-Write-Output "[OK] recursive-mode ready"
+if ($script:RecursiveModeReady) {
+    Write-Output "[OK] recursive-mode ready"
+}
 Write-Output ""

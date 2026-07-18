@@ -21,7 +21,7 @@ Once the user confirms routed setup, explicitly requests routed delegation, or t
 
 - `/.recursive/config/recursive-router.json`
 - `/.recursive/config/recursive-router-discovered.json`
-- `/skills/recursive-router/SKILL.md`
+- `../recursive-router/SKILL.md`
 
 before choosing a routed external CLI/model path for a role.
 
@@ -237,6 +237,6 @@ Reject a delegated result if any of the following are true:
 ## References
 
 - Canonical workflow: `/.recursive/RECURSIVE.md`
-- Artifact templates: `/references/artifact-template.md`
-- Code reviewer prompt: `/skills/recursive-subagent/agents/code-reviewer.md`
-- Implementer prompt: `/skills/recursive-subagent/agents/implementer.md`
+- Artifact templates: [../recursive-mode/references/artifact-template.md](../recursive-mode/references/artifact-template.md)
+- Code reviewer prompt: [agents/code-reviewer.md](agents/code-reviewer.md)
+- Implementer prompt: [agents/implementer.md](agents/implementer.md)

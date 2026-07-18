@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).with_name("lint-recursive-run.py")
+MODULE_PATH = Path(__file__).resolve().parent.parent / "skills" / "recursive-mode" / "scripts" / "lint-recursive-run.py"
 SPEC = importlib.util.spec_from_file_location("lint_recursive_run", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"Unable to load lint module from {MODULE_PATH}")

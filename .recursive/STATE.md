@@ -9,7 +9,7 @@
 - Delegated review is grounded by canonical review bundles, prior recursive evidence, and durable subagent action records under `/.recursive/run/<run-id>/subagents/`, with explicit main-agent verification recorded in the phase artifact.
 - Skill memory is available as an optional durable part of the memory plane via `/.recursive/memory/skills/`, with generic router/index support and category directories for intentionally promoted reusable guidance.
 - The maintained smoke harness lives in `scripts/test-recursive-mode-smoke.py` and `scripts/test-recursive-mode-smoke.ps1`, supports `python`, `powershell`, and `mixed` toolchain modes, and records lazy PowerShell fallback/skip behavior.
-- `scripts/install-recursive-mode.py` and `scripts/install-recursive-mode.ps1` scaffold the skill-memory router and category directories, and late closeout uses `scripts/recursive-closeout.py` / `.ps1` to seed audited Phase 4-8 receipts with machine-checkable requirement fields.
+- `skills/recursive-mode/` is the self-contained installable root skill. Its bootstrap copies the packaged Python and PowerShell runtime into target repositories under `/.recursive/scripts/`, including the closeout tools that seed audited Phase 4-8 receipts.
 
 ## Notes
 
