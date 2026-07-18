@@ -250,8 +250,8 @@ Keep this file concise. Link to child docs instead of duplicating them.
 - `/.recursive/memory/skills/usage/skill-discovery-and-evaluation.md`
 - `/.recursive/memory/skills/patterns/delegated-verification-and-refresh.md`
 - `/.recursive/memory/skills/patterns/phase8-skill-memory-promotion.md`
-    - Add child docs here only when they are intentionally promoted as reusable repository guidance.
-    """
+- Add child docs here only when they are intentionally promoted as reusable repository guidance.
+"""
 
 
 def cursorrules_memory_pointers_body() -> str:

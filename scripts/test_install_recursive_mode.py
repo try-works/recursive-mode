@@ -31,6 +31,18 @@ router_lib = importlib.util.module_from_spec(ROUTER_SPEC)
 sys.modules[ROUTER_SPEC.name] = router_lib
 ROUTER_SPEC.loader.exec_module(router_lib)
 
+HYGIENE_MODULE_PATH = RUNTIME_DIR / "check-reusable-repo-hygiene.py"
+HYGIENE_SPEC = importlib.util.spec_from_file_location("check_reusable_repo_hygiene", HYGIENE_MODULE_PATH)
+if HYGIENE_SPEC is None or HYGIENE_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load hygiene module from {HYGIENE_MODULE_PATH}")
+hygiene = importlib.util.module_from_spec(HYGIENE_SPEC)
+sys.modules[HYGIENE_SPEC.name] = hygiene
+HYGIENE_SPEC.loader.exec_module(hygiene)
+
+
+def windows_temp_source_fixture() -> str:
+    return "\\".join(("C:", "Users", "example", "AppData", "Local", "Temp", "skills-src"))
+
 
 class InstallRecursiveModeTests(unittest.TestCase):
     def test_package_surface_includes_recursive_training(self) -> None:
@@ -692,6 +704,74 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn('"recursive_phase_rules.py"', ps1_script)
         self.assertIn('Join-Path $recursiveRoot "scripts"', ps1_script)
 
+    def test_packaged_powershell_scripts_parse(self) -> None:
+        powershell = shutil.which("pwsh") or shutil.which("powershell")
+        if powershell is None:
+            self.skipTest("PowerShell is required for packaged script syntax coverage")
+
+        parse_command = (
+            "$tokens = $null; $parseErrors = $null; "
+            "[void][System.Management.Automation.Language.Parser]::ParseFile("
+            "$env:RECURSIVE_PS_PARSE_TARGET, [ref]$tokens, [ref]$parseErrors); "
+            "if ($parseErrors.Count -gt 0) { "
+            "$parseErrors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
+        )
+        for script_path in sorted(RUNTIME_DIR.glob("*.ps1")):
+            with self.subTest(script=script_path.name):
+                environment = os.environ.copy()
+                environment["RECURSIVE_PS_PARSE_TARGET"] = str(script_path)
+                completed = subprocess.run(
+                    [powershell, "-NoProfile", "-Command", parse_command],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    env=environment,
+                )
+                self.assertEqual(
+                    completed.returncode,
+                    0,
+                    f"PowerShell parse failed for {script_path.name}\n"
+                    f"STDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+                )
+
+    def test_python_and_powershell_installers_generate_equivalent_scaffolds(self) -> None:
+        powershell = shutil.which("pwsh") or shutil.which("powershell")
+        if powershell is None:
+            self.skipTest("PowerShell is required for cross-installer parity coverage")
+
+        def normalized_snapshot(root: Path) -> dict[Path, str]:
+            return {
+                path.relative_to(root): path.read_text(encoding="utf-8").replace("\r\n", "\n").rstrip("\n")
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+
+        with tempfile.TemporaryDirectory(prefix="install-recursive-mode-parity-") as temp_dir:
+            temp_root = Path(temp_dir)
+            python_root = temp_root / "python"
+            powershell_root = temp_root / "powershell"
+            python_completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--repo-root", str(python_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            powershell_completed = subprocess.run(
+                [powershell, "-NoProfile", "-File", str(MODULE_PATH.with_suffix(".ps1")), "-RepoRoot", str(powershell_root)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(python_completed.returncode, 0, python_completed.stderr)
+            self.assertEqual(powershell_completed.returncode, 0, powershell_completed.stderr)
+            python_snapshot = normalized_snapshot(python_root)
+            powershell_snapshot = normalized_snapshot(powershell_root)
+            self.assertEqual(python_snapshot.keys(), powershell_snapshot.keys())
+            for relative_path, python_content in python_snapshot.items():
+                with self.subTest(path=str(relative_path)):
+                    self.assertEqual(python_content, powershell_snapshot[relative_path])
+
     def test_shell_installer_source_includes_runtime_fallbacks(self) -> None:
         shell_script = MODULE_PATH.with_suffix(".sh").read_text(encoding="utf-8")
 
@@ -702,6 +782,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
         self.assertIn('run_powershell_installer powershell', shell_script)
         self.assertIn('"-RepoRoot"', shell_script)
         self.assertIn('"-SkipRecursiveUpdate"', shell_script)
+        self.assertFalse(shell_script.endswith("\n\n"))
 
     def test_shell_installer_powershell_fallback_preserves_skip_recursive_update(self) -> None:
         bash_candidates = []
@@ -798,7 +879,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 "version": 1,
                 "skills": {
                     "recursive-mode": {
-                        "source": r"C:\\Users\\example\\AppData\\Local\\Temp\\skills-src",
+                        "source": windows_temp_source_fixture(),
                         "sourceType": "local",
                         "computedHash": "abc123",
                     }
@@ -828,6 +909,18 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 f"hygiene check failed\nSTDOUT:\n{hygiene_completed.stdout}\nSTDERR:\n{hygiene_completed.stderr}",
             )
 
+    def test_repository_sources_contain_no_temp_path_residue(self) -> None:
+        offenders = []
+        for path in hygiene.iter_text_files(REPO_ROOT):
+            content = path.read_text(encoding="utf-8")
+            relative_path = path.relative_to(REPO_ROOT).as_posix()
+            for pattern in hygiene.TEMP_PATH_RESIDUE_RES:
+                if pattern.search(content):
+                    offenders.append(relative_path)
+                    break
+
+        self.assertEqual([], offenders)
+
     def test_hygiene_checker_rejects_local_skills_lock_temp_sources_outside_installed_workspace(self) -> None:
         with tempfile.TemporaryDirectory(prefix="install-recursive-mode-hygiene-source-") as temp_dir:
             repo_root = Path(temp_dir) / "repo"
@@ -848,7 +941,7 @@ class InstallRecursiveModeTests(unittest.TestCase):
                 "version": 1,
                 "skills": {
                     "recursive-mode": {
-                        "source": r"C:\\Users\\example\\AppData\\Local\\Temp\\skills-src",
+                        "source": windows_temp_source_fixture(),
                         "sourceType": "local",
                         "computedHash": "abc123",
                     }

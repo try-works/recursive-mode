@@ -281,14 +281,14 @@ function Get-RecursiveRouterPolicyJson {
       "model": null,
       "fallback": "self-audit"
     },
-    "memory-auditor": {
+    "tester": {
       "enabled": true,
       "mode": "external-cli",
       "cli": null,
       "model": null,
       "fallback": "self-audit"
     },
-    "tester": {
+    "memory-auditor": {
       "enabled": true,
       "mode": "external-cli",
       "cli": null,

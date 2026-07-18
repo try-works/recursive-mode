@@ -72,4 +72,3 @@ fi
 
 echo "Could not run install-recursive-mode via python3, python, py -3, pwsh, or powershell." >&2
 exit 1
-
