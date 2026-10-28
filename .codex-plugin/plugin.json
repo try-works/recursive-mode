@@ -1,0 +1,15 @@
+{
+  "name": "recursive-mode",
+  "version": "2.0.0",
+  "description": "Structured software development workflows with requirements, planning, implementation, review, verification, and durable memory.",
+  "author": {
+    "name": "try-works"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Recursive Mode",
+    "shortDescription": "Run staged development workflows with review and verification.",
+    "developerName": "try-works",
+    "category": "Productivity"
+  }
+}

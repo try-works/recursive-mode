@@ -163,6 +163,21 @@ Benefits of this memory model include:
 
 ## Install
 
+### Codex plugin marketplace
+
+Add this repository as a marketplace, then install the plugin:
+
+```bash
+codex plugin marketplace add try-works/recursive-mode --ref main
+codex plugin add recursive-mode@recursive-mode-repo
+```
+
+The plugin exposes the nine default skills listed above. The benchmark add-on remains separate. Start a new chat after installation to load the skills.
+
+This is a repository marketplace, separate from the public Plugins Directory.
+
+### Skills CLI
+
 Install the main skill:
 
 ```bash

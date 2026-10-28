@@ -1,0 +1,20 @@
+{
+  "name": "recursive-mode-repo",
+  "interface": {
+    "displayName": "Recursive Mode"
+  },
+  "plugins": [
+    {
+      "name": "recursive-mode",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
